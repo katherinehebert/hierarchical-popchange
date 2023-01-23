@@ -16,6 +16,8 @@ Where:
   - $\beta$ : estimated parameter describing each popultion's latent variation
 - $\epsilon$: residual variation
 
+Because the model also estimates latent variation, we are accounting for the covariation between populations when estimating $N$. 
+
 This model then contains key information to calculate and extend an index like the Living Planet Index, to show the average change in population size from a baseline value of 1 in the start year.
 
 To calculate the LPI, the estimated global change in population size $N$ can be plugged into the calculation to get the overall growth rate:
@@ -24,9 +26,9 @@ $$dt = log_{10} (\frac{N_t}{N_{t-1}}) $$
 
 Which can then be used to calculate the LPI as:
 
-$$ I_t = I_{t-1}*10^{dt} $$
+$$ I_t = I_{t-1}*10^{\bar{dt}} $$
 
-Because the model also estimates latent variation, we are accounting for the covariation between populations when estimating the global trend. 
+The confidence intervals for the index can be obtained directly from the residual error in the model estimating $N$, which propagates through the calculation of the log-ratio growth rate into the transformation into the index of change $I_t$. 
 
 
 ## Setting up
@@ -36,6 +38,8 @@ library(here)
 library(dplyr)
 library(HMSC)
 library(ggplot2)
+
+knitr::opts_chunk$set(message = FALSE, fig.align = 'center', fig.width = 8)
 ```
 
 ```{r}
@@ -85,9 +89,19 @@ mcmcMeansParamX <- as.mcmc(m, parameters = "meansParamX")
 traceplot(mcmcMeansParamX)
 ```
 
+### Extract model coefficients
+
+```{r}
+# extract the parameters and format them into an `mcmc` object.
+coef(m)
+```
+
+### Explanatory power
+
 ```{r}
 # model explanatory power
-(R2 <- Rsquared(m, averageSp = FALSE))
+
+# (R2 <- Rsquared(m, averageSp = FALSE))
 (R2comm <- Rsquared(m, averageSp = TRUE))
 ```
 
@@ -107,7 +121,7 @@ ci_hi <- as.data.frame(apply(m$results$estimation$paramX, 1:2, quantile, probs =
 ggplot(data = as.data.frame(XData), aes(x = V1)) +
   geom_abline(data = avg, 
               aes(slope = x1, intercept = Intercept),
-              lwd = 0.5) +
+              linewidth = 0.5) +
   # geom_abline(data = ci_lo,
   #             aes(slope = x1, intercept = Intercept),
   #             lty = 2, col = "blue") +
@@ -121,21 +135,17 @@ ggplot(data = as.data.frame(XData), aes(x = V1)) +
 
 ### Covariance between populations
 
-```{r}
+```{r, fig.width=12, fig.height = 12}
 # extract all estimated species-to-species associations matrix
 assoMat <- corRandomEff(m)
 
 # Average
 siteMean <- apply(assoMat[, , , 1], 1:2, mean)
 
-# build matrix of colours (red : neg, blue: pos)
-siteDrawCol <- matrix(NA, nrow = nrow(siteMean),
-                      ncol = ncol(siteMean))
-siteDrawCol[which(siteMean < 0, arr.ind=TRUE)]<-"red"
-siteDrawCol[which(siteMean > 0, arr.ind=TRUE)]<-"blue"
-
-# plot as a heatmap
-heatmap(siteMean, Rowv = NA, Colv = NA, col = siteDrawCol)
+# Plot as heatmap
+corrplot::corrplot(siteMean, type = "lower",
+                   method = "color", 
+                   tl.cex = .4, tl.col = "black")
 ```
 
 ## Global population trend
@@ -159,19 +169,23 @@ pred <- predict(m,
 pred_mean = apply(pred, 1, mean)
 ```
 
-```{r, echo=F}
+```{r, echo=F, warning=FALSE}
 plot(pred_mean ~ XData, 
      col = "white", xlab = "years", ylab = "N",
      ylim = c(min(pred), max(pred)))
 for(i in 1:ncol(pred)) {lines(pred[,i] ~ XData, lwd = .5)}
-lines(pred_mean ~ XData, lwd = 2)
+lines(pred_mean ~ XData, lwd = 2, col = "red")
+
+plot(log(pred_mean) ~ XData, 
+     col = "white", xlab = "years", ylab = "log(N)",
+     ylim = c(min(log(pred), na.rm = T), max(log(pred), na.rm = T)))
+for(i in 1:ncol(pred)) {lines(log(pred[,i]) ~ XData, lwd = .5)}
+lines(log(pred_mean) ~ XData, lwd = 2, col = "red")
 ```
 
 ## Rates of population change
 
-```{r, echo=F}
-#### calculate rate of change ####
-
+```{r, echo=T, warning=F}
 # calculate log-ratio population change
 calc_dt <- function(N){
   dt = c(1) # initial value
@@ -186,7 +200,11 @@ dt = apply(pred, 2, calc_dt)
 dt_bar = apply(dt, 1, mean, na.rm = TRUE)
 dt_ci = apply(dt, 1, quantile, probs = c(0.025, 0.975), na.rm = TRUE)
 dt_var = apply(dt, 1, var, na.rm = TRUE)
+```
 
+## Calculate an index of average change (à la LPI)
+
+```{r, echo=T}
 calc_lpi <- function(rate){
   lpi = 1
   for(t in 2:tsl){
@@ -203,7 +221,11 @@ matplot(lpi_pops, x = time,
         type = "l", lwd = 0.2, lty = 1, 
         ylim = c(0, 5))
 lines(x = time, y = lpi, lwd = 3)
+```
 
+### Show uncertainty in the mean
+
+```{r, echo=F}
 # plot lpi with CI from the variance
 plot(x = time, y = lpi, type = "l", ylim = c(0,2))
 lines(x = time, y = lpi - 1.96*sqrt(dt_var), lty = 2)
