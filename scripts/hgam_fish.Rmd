@@ -1,0 +1,198 @@
+# Hierarchical GAM on fish population trends
+
+Model we are attempting to build:
+
+$$N_{i,t} = f(t, \alpha_i) + g(\lambda_i, \beta_i) + \varepsilon_i$$
+
+Where:
+
+- $N$ : population size estimate
+- $i$ : population
+- $t$ : time step
+
+- $f(t, \alpha_i)$ : function estimating the temporal trend in population size
+  - $\alpha$: estimated parameter describing each population's temporal slope
+- $g(\lambda, \beta_i)$ : function estimating latent variation in population size
+  - $\lambda$ : latent variable (to capture covariation between populations)
+  - $\beta$ : estimated parameter describing each population's latent variation
+- $\varepsilon$: residual variation
+
+Because the model also estimates latent variation, we are accounting for the covariation between populations when estimating $N$. 
+
+This model then contains key information to calculate and extend an index like the Living Planet Index, to show the average change in population size from a baseline value of 1 in the start year.
+
+The first part of the model estimates the temporal trend of each population's size ($\alpha_i$), which contains information about population-level change _and_ community-level change:
+
+$$\alpha_i \sim N(\mu_{\alpha}, \sigma^2_{\alpha}) $$
+
+where:
+- \mu_{\alpha} is the average population trend
+- \sigma^2_{\alpha} is the variance in this average trend, giving us a measure of how variable the population trends are within the sample.
+
+To calculate the index of change from a baseline of 1 (as in the LPI), the average population trend can then be plugged in to the LPI calculation as follows:
+
+$$ I_t = {\mu_{\alpha}}*t + 1 $$
+
+This trend can then be visualized and communicated with its known ($\sigma^2_{\alpha}$).
+
+
+```{r, include = FALSE}
+# Script to build hierarchical GAM on fish population trends
+
+library(here)
+library(dplyr)
+library(tidyr)
+library(mgcv)
+library(tidymv)
+library(gratia)
+library(ggplot2)
+library(ggpubr)
+
+knitr::opts_chunk$set(message = FALSE, fig.align = 'center', fig.width = 8)
+
+theme_set(theme_pubr())
+```
+
+```{r}
+#### import & set up data ####
+
+# from https://github.com/eric-pedersen/groundfish-data-analysis
+# note: these are mean biomasses over the whole sampled area with an SE
+# not actually raw abundances. But for this purpose, should be ok
+load("~/Documents/GitHub/groundfish-data-analysis/data/year_geom_means.Rdata")
+
+time = rownames(Year_Geom_Means_all) %>% as.numeric()
+
+# get number of populations & length of time series
+npops <- ncol(Year_Geom_Means_all)
+tsl <- nrow(Year_Geom_Means_all)
+```
+
+## Building the model with mgcv
+
+```{r, results='hide'}
+# scale all columns
+Year_Geom_Means_all = apply(Year_Geom_Means_all, 2, scale) %>% as.data.frame()
+Year_Geom_Means_all$time = as.integer(time) 
+df = Year_Geom_Means_all %>% 
+  pivot_longer(cols = -time, 
+               names_to = "species", "values_to" = "N")
+df$species <- factor(df$species)
+
+# build a GI model: global smoother plus group-level smoothers with differing wiggliness
+
+m <- gam(N ~ 
+               # global smooth
+               s(time, bs = c("tp"), m = 2, k = 30) + 
+               # smooth per species
+               s(time, by = species, bs = c("tp"), m = 1, k = 30) +
+               # random intercept
+               s(species, bs = c("re")), 
+             data = df, 
+             method="REML", 
+             family="gaussian")
+
+# save model
+saveRDS(m, here("models/hgam.RDS"))
+```
+
+### Model performance
+
+```{r}
+gam.check(m)
+k.check(m)
+
+# draw(m)
+
+summary(m)
+```
+
+## Predicting the full model
+
+```{r}
+pred = predict_gam(m)
+
+ggplot(data = pred, aes(x = time, 
+                        y = fit,
+                        group = species)) +
+ geom_smooth_ci(lwd = .3)
+```
+
+### Predict global smooth
+
+```{r}
+pred = predict_gam(m, exclude_terms = )
+
+ggplot(data = pred, aes(x = time, 
+                        y = fit,
+                        group = species)) +
+ geom_smooth_ci(lwd = .3)
+```
+
+## Extracting model coefficients: alpha
+
+## Extract covariance between populations
+
+## Extract global population trend
+
+Note: this is *just* the temporal trend, without the latent variation or the residual error.
+
+### Average slope of the temporal trend in population size (LPI-pop)
+
+### Variance in the temporal trend across populations (LPI-comm)
+
+```{r}
+# drawing posteriors for the predicted response values:
+
+beta <- coef(m)   # vector of model parameters
+
+Vb <- vcov(m)     # default is the bayesian covariance matrix
+heatmap(Vb, Rowv = NA, Colv = NA)
+
+# Draw the estimated smooth 
+# plot(m, seWithMean = TRUE, unconditional = TRUE)
+
+# Evaluate the smooth over a range of values for `year`
+time_sm <- smooth_estimates(m, "s(time)")
+# add a confidence interval
+time_sm <- confint(m, "s(time)")
+time_sm
+
+ggplot(data = filter(time_sm, smooth == "s(time)"), 
+       aes(x = time)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = .4) +
+  geom_line(aes(y = est)) +
+  labs(y = "N", x = "") +
+  ggpubr::theme_pubr()
+
+ggplot(data = time_sm, aes(x = time)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = smooth), alpha = .1) +
+  geom_line(aes(y = est, col = smooth)) +
+  geom_ribbon(data = filter(time_sm, smooth == "s(time)"),
+              aes(x = time, ymin = lower, ymax = upper), alpha = .4) +
+  geom_line(data = filter(time_sm, smooth == "s(time)"),
+            aes(x = time, y = est)) +
+  labs(y = "N", x = "") +
+  ggpubr::theme_pubr() +
+  theme(legend.position = "none") 
+
+
+# sample from the posterior distribution
+m_post <- smooth_samples(m, 's(time)', n = 100, seed = 42) 
+
+post_summary <- m_post %>% 
+  group_by(.x1) %>% 
+  summarise(mu = mean(value, na.rm = TRUE),
+            lower = quantile(value, 0.025),
+            upper = quantile(value, 0.975),
+            variance = var(value)) %>% ungroup()
+
+time_fit <- evaluate_smooth(m, 's(time)')
+
+draw(time_fit) + 
+  geom_line(data = m_post, 
+            aes(x = .x1, y = value, group = draw),
+            alpha = 0.3, colour = 'red') 
+# why does the global smooth start out at a higher intercept?
+```
+
