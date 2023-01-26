@@ -1,0 +1,155 @@
+To calculate the LPI, the estimated global change in population size $N$ can be plugged into the calculation to get the overall growth rate:
+
+$$dt = log_{10} (\frac{N_t}{N_{t-1}}) $$
+
+Which can then be used to calculate the LPI as:
+
+$$ I_t = I_{t-1}*10^{\bar{dt}} $$
+
+The confidence intervals for the index can be obtained directly from the residual error in the model estimating $N$, which propagates through the calculation of the log-ratio growth rate into the transformation into the index of change $I_t$. 
+
+
+## Visualize the population temporal trends ($f(t, \alpha_i)$)
+
+```{r, echo=FALSE}
+# average model per species across iterations
+avg <- as.data.frame(apply(m$results$estimation$paramX, 1:2, mean))
+
+# get 95% confidence intervals
+ci_lo <- as.data.frame(apply(m$results$estimation$paramX, 1:2, quantile, probs = 0.025))
+ci_hi <- as.data.frame(apply(m$results$estimation$paramX, 1:2, quantile, probs = 0.975))
+```
+
+```{r, echo=FALSE}
+# plot all populations' models
+ggplot(data = as.data.frame(XData)) +
+  geom_abline(data = avg, 
+              aes(slope = x1, intercept = Intercept),
+              linewidth = 0.2) +
+  # geom_abline(data = ci_lo,
+  #             aes(slope = x1, intercept = Intercept),
+  #             lty = 2, col = "blue") +
+  # geom_abline(data = ci_hi,
+  #             aes(slope = x1, intercept = Intercept),
+  #             lty = 2, col = "red") +
+  ylim(c(-1,1))
+```
+
+
+
+
+
+
+
+--------
+
+## Predicting the full model
+
+```{r}
+# Predict and plot model over time 
+
+# prepare and format data
+formPredDat = as.HMSCdata(X = XData, Random = randomEff)
+
+# predict population size over time from the model
+pred <- predict(m,
+                newdata = formPredDat,
+                type = "response")
+```
+
+```{r}
+# Average N across populations
+pred_mean = apply(pred, 1, mean)
+pred_sd = apply(pred, 1, sd)
+```
+
+```{r, echo=F, warning=FALSE}
+plot(pred_mean ~ XData, 
+     col = "white", xlab = "years", ylab = "N",
+     ylim = c(min(pred), max(pred)))
+for(i in 1:ncol(pred)) {lines(pred[,i] ~ XData, lwd = .5)}
+lines(pred_mean ~ XData, lwd = 2, col = "red")
+lines(pred_mean + 1.96*pred_sd ~ XData, lwd = 2, lty= 2, col = "red")
+lines(pred_mean - 1.96*pred_sd ~ XData, lwd = 2, lty= 2, col = "red")
+```
+
+## Rates of population change
+
+```{r, echo=T, warning=F}
+# calculate log-ratio population change
+calc_dt <- function(N){
+  dt = c(0) # initial value
+  for(i in 2:length(N)){
+    dt[i] = log10(N[i]/N[i-1])
+  }
+  return(dt)
+}
+
+dt_bar = calc_dt(pred_mean)
+```
+
+```{r}
+plot(x = time, y = dt_bar, type = "l", ylim = c(-1, 1.2))
+```
+
+
+
+## Calculate an index of average change (à la LPI)
+
+```{r, echo=T}
+calc_lpi <- function(rate){
+  lpi = 1
+  for(t in 2:tsl){
+    lpi[t] = lpi[t-1]*10^rate[t]
+  }
+  return(lpi)
+}
+
+lpi = calc_lpi(dt_bar)
+lpi_pops = apply(dt, 2, calc_lpi)
+lpi_pops[which(is.nan(lpi_pops))] <- 0
+
+# plot lpi and all population lpis
+matplot(lpi_pops, x = time, 
+        type = "l", lwd = 0.2, lty = 1, 
+        ylim = c(0, 5),
+        main = "LPI with each populations' individual LPI")
+lines(x = time, y = lpi, lwd = 3)
+```
+
+### Show uncertainty in the mean
+
+```{r, echo=F}
+
+# function to calculate geometric mean that will be used in bootstrapping
+dtmean <- function(dt, i){
+  d <- dt[i] # indexing happens here
+  avg <- mean(d, na.rm = TRUE)
+  return(avg)
+}
+
+# function for bootstrap confidence interval 
+dt_boot = function(dt){
+  # bootstrap resampling
+  dt_r = boot::boot(dt, statistic = dtmean, R = 1000)
+  # calculate 95% confidence intervals
+  dt_ci = boot::boot.ci(dt_r, type = "basic", R = 1000)
+  # wrangle into table for output
+  dtboot_df = data.frame(mu = dt_ci$t0, 
+                         cilo = dt_ci$basic[4], 
+                         cihi = dt_ci$basic[5])
+  return(dtboot_df)
+}
+
+dt_ci = apply(dt, 1, dt_boot) %>% bind_rows()
+lpi_lower = calc_lpi(dt_ci$cilo)
+lpi_upper = calc_lpi(dt_ci$cihi)
+
+# plot lpi with CI from the variance
+plot(x = time, y = lpi, type = "l", ylim = c(0,1.2),
+     main = "LPI of all populations")
+abline(h = 1, lty = 2)
+lines(x = time, y = lpi_upper, lty = 3)
+lines(x = time, y = lpi_lower, lty = 3)
+```
+
