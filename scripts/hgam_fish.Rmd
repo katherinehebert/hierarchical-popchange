@@ -78,92 +78,55 @@ df = Year_Geom_Means_all %>%
   pivot_longer(cols = -time, 
                names_to = "species", "values_to" = "N")
 df$species <- factor(df$species)
+```
 
+```{r, results='hide', eval = FALSE}
 # build a GI model: global smoother plus group-level smoothers with differing wiggliness
 
-m <- gam(N ~ 
-               # global smooth
-               s(time, bs = c("tp"), m = 2, k = 30) + 
-               # smooth per species
-               s(time, by = species, bs = c("tp"), m = 1, k = 30) +
-               # random intercept
-               s(species, bs = c("re")), 
-             data = df, 
-             method="REML", 
-             family="gaussian")
+m <- gam(N ~ # global smooth
+           s(time, bs = c("tp"), m = 2, k = 15) +
+           # smooth per species
+           s(time, by = species, bs = c("tp"), m = 1, k = 15) +
+           # random intercept
+           s(species, bs = c("re")),
+         data = df,
+         method="REML",
+         family="gaussian")
 
 # save model
-saveRDS(m, here("models/hgam.RDS"))
+saveRDS(m, here("models/hgam_modelGI.RDS"))
 ```
 
 ### Model performance
 
 ```{r}
+m <- readRDS("models/hgam_modelGI.RDS")
+
 gam.check(m)
-k.check(m)
-
 # draw(m)
-
 summary(m)
 ```
 
 ## Predicting the full model
 
-```{r}
-pred = predict_gam(m)
+### Predict global smooth (overall temporal trend)
 
-ggplot(data = pred, aes(x = time, 
-                        y = fit,
-                        group = species)) +
- geom_smooth_ci(lwd = .3)
+```{r}
+# plot the global smooth s(time)
+plot(m, 
+     residuals = TRUE, shade = TRUE, shade.col = "lightblue", 
+     select = 1, 
+     seWithMean = TRUE, 
+     shift = unname(coef(m)[1]))
 ```
 
-### Predict global smooth
+### Predict species smooths
 
 ```{r}
-pred = predict_gam(m, exclude_terms = )
-
-ggplot(data = pred, aes(x = time, 
-                        y = fit,
-                        group = species)) +
- geom_smooth_ci(lwd = .3)
-```
-
-## Extracting model coefficients: alpha
-
-## Extract covariance between populations
-
-## Extract global population trend
-
-Note: this is *just* the temporal trend, without the latent variation or the residual error.
-
-### Average slope of the temporal trend in population size (LPI-pop)
-
-### Variance in the temporal trend across populations (LPI-comm)
-
-```{r}
-# drawing posteriors for the predicted response values:
-
-beta <- coef(m)   # vector of model parameters
-
-Vb <- vcov(m)     # default is the bayesian covariance matrix
-heatmap(Vb, Rowv = NA, Colv = NA)
-
-# Draw the estimated smooth 
-# plot(m, seWithMean = TRUE, unconditional = TRUE)
-
 # Evaluate the smooth over a range of values for `year`
-time_sm <- smooth_estimates(m, "s(time)")
+time_smest <- smooth_estimates(m, "s(time)", n = tsl)
 # add a confidence interval
-time_sm <- confint(m, "s(time)")
-time_sm
-
-ggplot(data = filter(time_sm, smooth == "s(time)"), 
-       aes(x = time)) +
-  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = .4) +
-  geom_line(aes(y = est)) +
-  labs(y = "N", x = "") +
-  ggpubr::theme_pubr()
+time_sm <- confint(m, "s(time)", n = tsl)
 
 ggplot(data = time_sm, aes(x = time)) +
   geom_ribbon(aes(ymin = lower, ymax = upper, fill = smooth), alpha = .1) +
@@ -172,9 +135,77 @@ ggplot(data = time_sm, aes(x = time)) +
               aes(x = time, ymin = lower, ymax = upper), alpha = .4) +
   geom_line(data = filter(time_sm, smooth == "s(time)"),
             aes(x = time, y = est)) +
-  labs(y = "N", x = "") +
+  labs(y = "s(time)", x = "") +
   ggpubr::theme_pubr() +
   theme(legend.position = "none") 
+```
+
+## Extracting model coefficients: alpha
+
+```{r}
+time_smest
+
+plot(x = time_smest$time, y = time_smest$est, type = "l")
+lines(x = time_smest$time, 
+      y = time_smest$est + time_smest$se, lty = 2)
+lines(x = time_smest$time, 
+      y = time_smest$est - time_smest$se, lty = 2)
+```
+
+## Extract covariance between populations
+
+```{r}
+Vb <- vcov(m, freq = FALSE) # default is the bayesian cov matrix
+# heatmap(Vb, Rowv = NA, Colv = NA)
+# corrplot::corrplot(Vb,
+#                    method = "color",
+#                    type = "lower",
+#                    tl.pos = "n")
+
+# Vb_sponly <- Vb[which(grepl("species", rownames(Vb))),
+#                 which(grepl("species", colnames(Vb)))]
+# Vb_sponly_ls <- list()
+# for(i in 1:30){
+#   Vb_sponly_ls[[i]] <- Vb_sponly[
+#     which(grepl(paste0(i), rownames(Vb_sponly))),
+#     which(grepl(paste0(i), colnames(Vb_sponly)))]
+# }
+# 
+# Vb_cor = cov2cor(Vb_sponly)
+# 
+# for(i in 1:29){
+# corrplot::corrplot(Vb_sponly_ls[[i]], 
+#                    method = "color", 
+#                    type = "lower", 
+#                    tl.pos = "n")
+# }
+```
+
+## Extract global population trend
+
+Note: this is *just* the temporal trend, without the latent variation or the residual error.
+
+### Average slope of the temporal trend in population size (LPI-pop)
+
+```{r}
+lpipop = filter(time_sm, smooth == "s(time)")$est
+```
+
+
+### Variance in the temporal trend across populations (LPI-comm)
+
+```{r}
+lpicomm = filter(time_sm, smooth == "s(time)")$se
+# not sure about this one...
+```
+
+```{r}
+# drawing posteriors for the predicted response values:
+
+beta <- coef(m)   # vector of model parameters
+
+Vb <- vcov(m)     # default is the bayesian covariance matrix
+heatmap(Vb, Rowv = NA, Colv = NA)
 
 
 # sample from the posterior distribution
@@ -187,12 +218,42 @@ post_summary <- m_post %>%
             upper = quantile(value, 0.975),
             variance = var(value)) %>% ungroup()
 
-time_fit <- evaluate_smooth(m, 's(time)')
+time_fit <- evaluate_smooth(m, 's(time)', n = tsl)
 
 draw(time_fit) + 
   geom_line(data = m_post, 
             aes(x = .x1, y = value, group = draw),
             alpha = 0.3, colour = 'red') 
-# why does the global smooth start out at a higher intercept?
+
+
+preds = predict(m, se.fit = TRUE, type = "response")
+pred <- bind_cols(preds) %>% bind_cols(df)
+
+ilink = inv_link(m)
+crit <- qnorm((1 - 0.89) / 2, lower.tail = FALSE) # or just `crit <- 2`
+pred <- mutate(pred, Npred = ilink(fit),
+               lwr = ilink(fit - (crit * se.fit)), # lower...
+               upr = ilink(fit + (crit * se.fit))) # upper credible interval
+
+ggplot(pred, aes(x = time, group = species)) +
+    geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.2) +
+    geom_line(aes(y = Npred), lwd = .2) + 
+  labs(y = "Predicted population size", x = NULL)
+
+
+
+beta <- coef(m)   # vector of model parameters
+Vb <- vcov(m)     # default is the Bayesian covariance matrix
+Xp <- predict(m, type = 'lpmatrix')
+set.seed(42)
+beta_sim <- rmvn(n = 1000, beta, Vb) # simulate parameters
+eta_p <- Xp %*% t(beta_sim)        # form linear predictor values
+mu_p <- inv_link(m)(eta_p)    # apply inverse link function
+mean(mu_p[1, ]) # mean of posterior for the first observation in the data
+quantile(mu_p[1, ], probs = c(0.025, 0.975))
+
+
+year1_row <- which(df$time == 1981)
+hist(mu_p[year1_row,], main = "1990")
 ```
 
