@@ -1,0 +1,303 @@
+# Hierarchical GAM on fish population trends in Bayesian framework
+
+Model we are attempting to build:
+
+$$N_{i,t} = f(t, \alpha_i) + g(\lambda_i, \beta_i) + \varepsilon_i$$
+
+Where:
+
+- $N$ : population size estimate
+- $i$ : population
+- $t$ : time step
+
+- $f(t, \alpha_i)$ : function estimating the temporal trend in population size
+  - $\alpha$: estimated parameter describing each population's temporal slope
+- $g(\lambda, \beta_i)$ : function estimating latent variation in population size
+  - $\lambda$ : latent variable (to capture covariation between populations)
+  - $\beta$ : estimated parameter describing each population's latent variation
+- $\varepsilon$: residual variation
+
+Because the model also estimates latent variation, we are accounting for the covariation between populations when estimating $N$. 
+
+This model then contains key information to calculate and extend an index like the Living Planet Index, to show the average change in population size from a baseline value of 1 in the start year.
+
+The first part of the model estimates the temporal trend of each population's size ($\alpha_i$), which contains information about population-level change _and_ community-level change:
+
+$$\alpha_i \sim N(\mu_{\alpha}, \sigma^2_{\alpha}) $$
+
+where:
+- \mu_{\alpha} is the average population trend
+- \sigma^2_{\alpha} is the variance in this average trend, giving us a measure of how variable the population trends are within the sample.
+
+To calculate the index of change from a baseline of 1 (as in the LPI), the average population trend can then be plugged in to the LPI calculation as follows:
+
+$$ I_t = {\mu_{\alpha}}*t + 1 $$
+
+This trend can then be visualized and communicated with its known ($\sigma^2_{\alpha}$).
+
+
+```{r, include = FALSE}
+# Script to build hierarchical GAM on fish population trends
+
+library(here)
+library(dplyr)
+library(tidyr)
+library(mgcv)
+library(tidymv)
+library(gratia)
+library(ggplot2)
+library(ggpubr)
+#devtools::install_github("nicholasjclark/mvgam")
+#remotes::install_github("stan-dev/cmdstanr")
+library(cmdstanr)
+library(mvgam)
+
+knitr::opts_chunk$set(message = FALSE, fig.align = 'center', fig.width = 8)
+
+theme_set(theme_pubr())
+```
+
+```{r}
+#### import & set up data ####
+
+# from https://github.com/eric-pedersen/groundfish-data-analysis
+# note: these are mean biomasses over the whole sampled area with an SE
+# not actually raw abundances. But for this purpose, should be ok
+load("~/Documents/GitHub/groundfish-data-analysis/data/year_geom_means.Rdata")
+
+year = rownames(Year_Geom_Means_all) %>% as.numeric()
+
+# scale all columns
+Year_Geom_Means_all = apply(Year_Geom_Means_all, 2, scale) %>% as.data.frame()
+Year_Geom_Means_all$year = year 
+df = Year_Geom_Means_all %>% 
+  pivot_longer(cols = -year, 
+               names_to = "species", 
+               values_to = "y")
+df$species <- factor(df$species)
+
+# get number of populations & length of time series
+npops <- ncol(Year_Geom_Means_all)
+tsl <- nrow(Year_Geom_Means_all)
+
+set.seed(2)
+# dat <- sim_mvgam(T = 30, 
+#                  n_series = 20, 
+#                  n_lv = 1,
+#                  family = 'poisson',
+#                  mu_obs = runif(6, 4, 8),
+#                  trend_rel = 0.6, 
+#                  train_prop = 0.85)
+dat_train = filter(df, year %in% c(1981:2000))
+dat_test = filter(df, year %in% c(2001:2013))
+
+ggplot(dat_train) +
+  geom_line(aes(x = time, y = y, group = series), lwd = .1)
+```
+
+## Building the model 
+
+```{r, results='hide'}
+mod1 <- mvgam(data = dat$data_train,
+                newdata = dat$data_test,
+                formula = y ~ s(series, bs = 're'),
+                knots = list(season = c(0.5, 12.5)),
+                use_lv = TRUE,
+                n_lv = 2,
+                family = 'poisson',
+                trend_model = 'RW',
+                use_stan = TRUE,
+                chains = 4,
+                burnin = 300,
+                samples = 400)
+```
+
+```{r}
+plot(mod1)
+```
+
+```{r, results='hide'}
+mvgam_prior <- mvgam(data = df,
+               formula = y ~ s(time, bs = 'tp', k = 15),
+               family = 'poisson',
+               trend_model = 'AR1',
+               chains = 2,
+               use_stan = TRUE)
+
+plot(lynx_mvgam_prior, type = 'smooths', realisations = TRUE)
+# build a GI model: global smoother plus group-level smoothers with differing wiggliness
+
+m <- gam(N ~ # global smooth
+           s(time, bs = c("tp"), m = 2, k = 15) +
+           # smooth per species
+           s(time, by = species, bs = c("tp"), m = 1, k = 15) +
+           # random intercept
+           s(species, bs = c("re")),
+         data = df,
+         method="REML",
+         family="gaussian")
+
+# save model
+saveRDS(m, here("models/hgam_modelGI.RDS"))
+```
+
+### Model performance
+
+```{r}
+m <- readRDS("models/hgam_modelGI.RDS")
+
+gam.check(m)
+# draw(m)
+summary(m)
+```
+
+## Predicting the full model
+
+### Predict global smooth (overall temporal trend)
+
+```{r}
+# plot the global smooth s(time)
+plot(m, 
+     residuals = TRUE, shade = TRUE, shade.col = "lightblue", 
+     select = 1, 
+     seWithMean = TRUE, 
+     shift = unname(coef(m)[1]))
+```
+
+### Predict species smooths
+
+```{r}
+# Evaluate the smooth over a range of values for `year`
+time_smest <- smooth_estimates(m, "s(time)", n = tsl)
+# add a confidence interval
+time_sm <- confint(m, "s(time)", n = tsl)
+
+ggplot(data = time_sm, aes(x = time)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = smooth), alpha = .1) +
+  geom_line(aes(y = est, col = smooth)) +
+  geom_ribbon(data = filter(time_sm, smooth == "s(time)"),
+              aes(x = time, ymin = lower, ymax = upper), alpha = .4) +
+  geom_line(data = filter(time_sm, smooth == "s(time)"),
+            aes(x = time, y = est)) +
+  labs(y = "s(time)", x = "") +
+  ggpubr::theme_pubr() +
+  theme(legend.position = "none") 
+```
+
+## Extracting model coefficients: alpha
+
+```{r}
+time_smest
+
+plot(x = time_smest$time, y = time_smest$est, type = "l")
+lines(x = time_smest$time, 
+      y = time_smest$est + time_smest$se, lty = 2)
+lines(x = time_smest$time, 
+      y = time_smest$est - time_smest$se, lty = 2)
+```
+
+## Extract covariance between populations
+
+```{r}
+Vb <- vcov(m, freq = FALSE) # default is the bayesian cov matrix
+# heatmap(Vb, Rowv = NA, Colv = NA)
+# corrplot::corrplot(Vb,
+#                    method = "color",
+#                    type = "lower",
+#                    tl.pos = "n")
+
+# Vb_sponly <- Vb[which(grepl("species", rownames(Vb))),
+#                 which(grepl("species", colnames(Vb)))]
+# Vb_sponly_ls <- list()
+# for(i in 1:30){
+#   Vb_sponly_ls[[i]] <- Vb_sponly[
+#     which(grepl(paste0(i), rownames(Vb_sponly))),
+#     which(grepl(paste0(i), colnames(Vb_sponly)))]
+# }
+# 
+# Vb_cor = cov2cor(Vb_sponly)
+# 
+# for(i in 1:29){
+# corrplot::corrplot(Vb_sponly_ls[[i]], 
+#                    method = "color", 
+#                    type = "lower", 
+#                    tl.pos = "n")
+# }
+```
+
+## Extract global population trend
+
+Note: this is *just* the temporal trend, without the latent variation or the residual error.
+
+### Average slope of the temporal trend in population size (LPI-pop)
+
+```{r}
+lpipop = filter(time_sm, smooth == "s(time)")$est
+```
+
+
+### Variance in the temporal trend across populations (LPI-comm)
+
+```{r}
+lpicomm = filter(time_sm, smooth == "s(time)")$se
+# not sure about this one...
+```
+
+```{r}
+# drawing posteriors for the predicted response values:
+
+beta <- coef(m)   # vector of model parameters
+
+Vb <- vcov(m)     # default is the bayesian covariance matrix
+heatmap(Vb, Rowv = NA, Colv = NA)
+
+
+# sample from the posterior distribution
+m_post <- smooth_samples(m, 's(time)', n = 100, seed = 42) 
+
+post_summary <- m_post %>% 
+  group_by(.x1) %>% 
+  summarise(mu = mean(value, na.rm = TRUE),
+            lower = quantile(value, 0.025),
+            upper = quantile(value, 0.975),
+            variance = var(value)) %>% ungroup()
+
+time_fit <- evaluate_smooth(m, 's(time)', n = tsl)
+
+draw(time_fit) + 
+  geom_line(data = m_post, 
+            aes(x = .x1, y = value, group = draw),
+            alpha = 0.3, colour = 'red') 
+
+
+preds = predict(m, se.fit = TRUE, type = "response")
+pred <- bind_cols(preds) %>% bind_cols(df)
+
+ilink = inv_link(m)
+crit <- qnorm((1 - 0.89) / 2, lower.tail = FALSE) # or just `crit <- 2`
+pred <- mutate(pred, Npred = ilink(fit),
+               lwr = ilink(fit - (crit * se.fit)), # lower...
+               upr = ilink(fit + (crit * se.fit))) # upper credible interval
+
+ggplot(pred, aes(x = time, group = species)) +
+    geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.2) +
+    geom_line(aes(y = Npred), lwd = .2) + 
+  labs(y = "Predicted population size", x = NULL)
+
+
+
+beta <- coef(m)   # vector of model parameters
+Vb <- vcov(m)     # default is the Bayesian covariance matrix
+Xp <- predict(m, type = 'lpmatrix')
+set.seed(42)
+beta_sim <- rmvn(n = 1000, beta, Vb) # simulate parameters
+eta_p <- Xp %*% t(beta_sim)        # form linear predictor values
+mu_p <- inv_link(m)(eta_p)    # apply inverse link function
+mean(mu_p[1, ]) # mean of posterior for the first observation in the data
+quantile(mu_p[1, ], probs = c(0.025, 0.975))
+
+
+year1_row <- which(df$time == 1981)
+hist(mu_p[year1_row,], main = "1990")
+```
+
