@@ -195,3 +195,22 @@ Note: this is *just* the temporal trend, without the latent variation or the res
 ```
 
 So after accounting for the covariation between populations, an average population in this ensemble declined in size by 7.8% every year but the temporal trends vary a lot between populations ($\sigma^2$ = 0.11, so SD = 0.34).
+
+## Compare to LPI
+
+Importing results from the LPI calculated on the same dataset:
+
+```{r}
+rlpi_results <- readRDS("~/Documents/GitHub/hierarchical-lpi/outputs/rlpi_results.rds")
+rlpi_results$time <- as.integer(rownames(rlpi_results))
+rlpi_results <- rlpi_results[-nrow(rlpi_results),] # remove last value which is negative
+```
+
+```{r}
+hmsclpi = (time-time[1])*lpipop + 1
+ggplot() +
+  geom_line(data = rlpi_results, aes(x = time, y = LPI_final)) +
+  geom_line(aes(y = hmsclpi, x = time), col = "red")
+```
+
+
