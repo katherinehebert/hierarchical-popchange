@@ -48,3 +48,7 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 unnamed-chunk-*
+lpi_temp/
+data/
+default_infile_infile_*
+default_infile_pops_*
