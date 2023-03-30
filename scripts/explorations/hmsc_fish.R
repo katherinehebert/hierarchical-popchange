@@ -3,26 +3,52 @@
 library(dplyr)
 library(HMSC)
 library(ggplot2)
+library(tidyr)
+theme_set(ggpubr::theme_pubr())
 
 #### import & set up data ####
 
-# from https://github.com/eric-pedersen/groundfish-data-analysis
-# note: these are mean biomasses over the whole sampled area with an SE
-# not actually raw abundances. But for this purpose, should be ok
-load("~/Documents/GitHub/groundfish-data-analysis/data/year_geom_means.Rdata")
+library(readr)
+LPD <- read_csv("~/Documents/GitHub/synchrony/data_raw/LPD2022_public.csv")
 
-time = rownames(Year_Geom_Means_all) %>% as.numeric()
+# keep only the DFO dataset
+df <- LPD[grep("DFO \\(2016\\)", LPD$Citation, value = FALSE),]
+# 2016 is also maybe a good candidate
+
+# convert LPD to long format
+df <- pivot_longer(df, cols = 33:103,
+                   names_to = "year_obs", 
+                   values_to = "obs_value") %>%
+  subset(select = c(ID, Genus, Species, year_obs, obs_value)) 
+df$obs_value <- as.numeric(df$obs_value)
+df <- na.omit(df) #NAs are empty years. delete them
+
+# reformat some columns
+df$year_obs <- parse_number(df$year_obs)
+df$scientific_name <- paste0(df$Genus, "_", df$Species)
 
 # get number of populations & length of time series
-npops <- ncol(Year_Geom_Means_all)
-tsl <- nrow(Year_Geom_Means_all)
+time = unique(df$year_obs) %>% as.numeric()
+npops <- length(unique(df$ID))
+tsl <- length(unique(df$year_obs))
+
+ggplot(df) +
+  geom_line(aes(x = year_obs, y = log(obs_value), col = scientific_name, group = ID)) +
+  labs(x = "Year", y = "Population size (log)") +
+  theme(legend.position = "none")
+
+# convert to wide format
+df_l <- df
+df_w <- pivot_wider(subset(df, select = -c(Genus, Species, scientific_name)),
+                    names_from = ID, 
+                    values_from = obs_value)
 
 #### build HMSC model ####
 
 # format data
-XData <- as.matrix(time)
-YData <- as.matrix(Year_Geom_Means_all)
-randomEff <- as.factor(1:tsl) # assign a location to pairings of pops
+XData <- as.matrix(df_w$year_obs)
+YData <- as.matrix(subset(df_w, select = -c(year_obs)))
+randomEff <- as.factor(df_w$scientific_name) # assign a location to pairings of pops
 
 # prepare data
 formDat <- as.HMSCdata(X = XData, Y = YData, Random = randomEff)
