@@ -134,9 +134,6 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p>The first part of the model estimates the temporal trend of each population’s size (<span class="math inline">\(\alpha_i\)</span>), which contains information about population-level change <em>and</em> community-level change:</p>
 <p><span class="math display">\[\alpha_i \sim N(\mu_{\alpha}, \sigma^2_{\alpha}) \]</span></p>
 <p>where: - <em>{} is the average population trend - ^2</em>{} is the variance in this average trend, giving us a measure of how variable the population trends are within the sample.</p>
-<p>To calculate the index of change from a baseline of 1 (as in the LPI), the average population trend can then be plugged in to the LPI calculation as follows:</p>
-<p><span class="math display">\[ I_t = {\mu_{\alpha}}*t + 1 \]</span></p>
-<p>This trend can then be visualized and communicated with its known (<span class="math inline">\(\sigma^2_{\alpha}\)</span>).</p>
 <section id="setting-up" class="level2">
 <h2 class="anchored" data-anchor-id="setting-up">Setting up</h2>
 <div class="cell" data-layout-align="center">
@@ -205,7 +202,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co"># (R2 &lt;- Rsquared(m, averageSp = FALSE))</span></span>
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>(R2comm <span class="ot">&lt;-</span> <span class="fu">Rsquared</span>(m, <span class="at">averageSp =</span> <span class="cn">TRUE</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>[1] 0.7021268</code></pre>
+<pre><code>[1] 0.702473</code></pre>
 </div>
 </div>
 </section>
@@ -334,12 +331,12 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <div class="cell" data-layout-align="center">
 <div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>(<span class="at">lpipop =</span> <span class="fu">mean</span>(coefs<span class="sc">$</span>paramX[,<span class="dv">2</span>]))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>[1] -0.07179558</code></pre>
+<pre><code>[1] -0.08086452</code></pre>
 </div>
 <div class="sourceCode cell-code" id="cb18"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>(<span class="at">lpipop_ci =</span> <span class="fu">quantile</span>(coefs<span class="sc">$</span>paramX[,<span class="dv">2</span>], <span class="at">probs =</span> <span class="fu">c</span>(<span class="fl">0.025</span>, <span class="fl">0.975</span>)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>      2.5%      97.5% 
--0.5037577  0.5582972 </code></pre>
+-0.5190664  0.5492530 </code></pre>
 </div>
 </div>
 </section>
@@ -348,7 +345,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <div class="cell" data-layout-align="center">
 <div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>(<span class="at">lpicomm =</span> <span class="fu">var</span>(coefs<span class="sc">$</span>paramX[,<span class="dv">2</span>]))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>[1] 0.1160106</code></pre>
+<pre><code>[1] 0.1171372</code></pre>
 </div>
 </div>
 <p>So after accounting for the covariation between populations, an average population in this ensemble declined in size by 7.8% every year but the temporal trends vary a lot between populations (<span class="math inline">\(\sigma^2\)</span> = 0.11, so SD = 0.34).</p>
@@ -400,8 +397,8 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </ul>
 <p>The HMSC trend allows us to report quite a bit:</p>
 <ul>
-<li>On average, population abundance declined during this time period (slope = -0.072).</li>
-<li>Populations’ temporal trends were pretty variable (variance of the slope = 0.116). The 95% credible interval around the slope was: -0.504, 0.558).</li>
+<li>On average, population abundance declined during this time period (slope = -0.081).</li>
+<li>Populations’ temporal trends were pretty variable (variance of the slope = 0.117). The 95% credible interval around the slope was: -0.519, 0.549).</li>
 </ul>
 <p>This is what the overall trend in (scaled) population abundance looks like, with 95% credible intervals around the median trend:</p>
 <div class="cell" data-layout-align="center">

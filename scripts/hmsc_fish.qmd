@@ -33,12 +33,6 @@ where:
 - \mu_{\alpha} is the average population trend
 - \sigma^2_{\alpha} is the variance in this average trend, giving us a measure of how variable the population trends are within the sample.
 
-To calculate the index of change from a baseline of 1 (as in the LPI), the average population trend can then be plugged in to the LPI calculation as follows:
-
-$$ I_t = {\mu_{\alpha}}*t + 1 $$
-
-This trend can then be visualized and communicated with its known ($\sigma^2_{\alpha}$).
-
 ## Setting up
 
 ```{r, include=FALSE}
