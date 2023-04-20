@@ -55,3 +55,4 @@ default_infile_pops_*
 scripts/mvgam_simulateddata_files/
 lm_intercept.txt
 base_gam.txt
+scripts/hmsc_fish_files/
