@@ -1,0 +1,309 @@
+---
+theme: litera
+---
+
+# Hierarchical linear model on fish population trends
+
+Model we are attempting to build:
+
+$$N_{i,t} = f(t, \alpha_i) + g(\lambda_i, \beta_i) + \varepsilon_i$$
+
+Where:
+
+- $N$ : population size estimate
+- $i$ : population
+- $t$ : time step
+
+- $f(t, \alpha_i)$ : function estimating the temporal trend in population size
+  - $\alpha$: estimated parameter describing each population's temporal slope
+- $g(\lambda, \beta_i)$ : function estimating latent variation in population size
+  - $\lambda$ : latent variable (to capture covariation between populations)
+  - $\beta$ : estimated parameter describing each population's latent variation
+- $\varepsilon$: residual variation
+
+Because the model also estimates latent variation, we are accounting for the covariation between populations when estimating $N$. 
+
+This model then contains key information to calculate and extend an index like the Living Planet Index, to show the average change in population size from a baseline value of 1 in the start year.
+
+The first part of the model estimates the temporal trend of each population's size ($\alpha_i$), which contains information about population-level change _and_ community-level change:
+
+$$\alpha_i \sim N(\mu_{\alpha}, \sigma^2_{\alpha}) $$
+
+where:
+- \mu_{\alpha} is the average population trend
+- \sigma^2_{\alpha} is the variance in this average trend, giving us a measure of how variable the population trends are within the sample.
+
+To calculate the index of change from a baseline of 1 (as in the LPI), the average population trend can then be plugged in to the LPI calculation as follows:
+
+$$ I_t = {\mu_{\alpha}}*t + 1 $$
+
+This trend can then be visualized and communicated with its known ($\sigma^2_{\alpha}$).
+
+## Setting up
+
+```{r, include=FALSE}
+library(here)
+library(dplyr)
+library(HMSC)
+library(ggplot2)
+library(ggpubr)
+library(patchwork)
+
+knitr::opts_chunk$set(message = FALSE, fig.align = 'center', fig.width = 8)
+
+theme_set(theme_pubr())
+```
+
+```{r}
+#### import & set up data ####
+
+# from https://github.com/eric-pedersen/groundfish-data-analysis
+# note: these are mean biomasses over the whole sampled area with an SE
+# not actually raw abundances. But for this purpose, should be ok
+load("~/Documents/GitHub/groundfish-data-analysis/data/year_geom_means.Rdata")
+
+time = rownames(Year_Geom_Means_all) %>% as.numeric()
+
+# get number of populations & length of time series
+npops <- ncol(Year_Geom_Means_all)
+tsl <- nrow(Year_Geom_Means_all)
+```
+
+## Building the model with HMSC
+
+```{r, results='hide'}
+# format data
+XData <- as.matrix(time)
+YData <- as.matrix(Year_Geom_Means_all) %>% apply(2, scale, center = FALSE)
+randomEff <- as.factor(1:tsl) # assign a location to pairings of pops
+
+# prepare data
+formDat <- as.HMSCdata(X = XData, Y = YData, Random = randomEff, 
+                       interceptX = TRUE)
+
+# run model
+m <- hmsc(formDat,
+                family = "gaussian",
+                niter = 15000,
+                nburn = 5000,
+                thin = 5,
+                verbose = FALSE)
+# save model
+saveRDS(m, here("models/hmsc.RDS"))
+```
+
+### Model performance
+
+```{r}
+# extract the parameters and format them into an `mcmc` object.
+mcmcMeansParamX <- as.mcmc(m, parameters = "meansParamX")
+
+# check for parameter convergence (visually)
+traceplot(mcmcMeansParamX)
+```
+
+```{r}
+# Explanatory power 
+
+# (R2 <- Rsquared(m, averageSp = FALSE))
+(R2comm <- Rsquared(m, averageSp = TRUE))
+```
+
+## Predicting the full model
+
+```{r}
+# Predict and plot model over time 
+
+# prepare and format data
+formPredDat = as.HMSCdata(X = XData, Random = randomEff)
+
+# predict population size over time from the model
+pred <- predict(m,
+                newdata = formPredDat,
+                type = "response")
+```
+
+```{r}
+# Average N across populations
+pred_mean = apply(pred, 1, mean)
+pred_sd = apply(pred, 1, sd)
+pred_quantiles = apply(pred, 1, quantile, probs = c(0.025, 0.5, 0.975))
+```
+
+```{r, echo=F, warning=FALSE}
+plot(pred_quantiles[2,] ~ XData, 
+     col = "white", xlab = "years", ylab = "N",
+     ylim = c(min(pred), max(pred)))
+for(i in 1:ncol(pred)) {lines(pred[,i] ~ XData, lwd = .5)}
+lines(pred_quantiles[2,] ~ XData, lwd = 2, col = "red")
+lines(pred_mean ~ XData, lwd = 2, col = "blue")
+lines(pred_quantiles[1,] ~ XData, lwd = 2, lty= 2, col = "red")
+lines(pred_quantiles[3,] ~ XData, lwd = 2, lty= 2, col = "red")
+```
+
+__Legend__:
+
+Black lines = prediction for each population
+Blue line = mean prediction
+Red line = median prediction
+Dashed red lines = 2.5% and 97.5% quantiles (95% credible interval)
+
+## Extract model coefficients: alpha
+
+```{r}
+# extract the parameters and format them into an `mcmc` object.
+coefs = coef(m)
+```
+
+```{r}
+temp = as.data.frame(coefs$paramX)
+temp$pop = rownames(temp)
+temp$pop <- factor(temp$pop, levels = temp$pop[order(temp$x1)])
+
+data_breaks <- data.frame(start = c(-1, -0.1, 0.1),  # Create data with breaks
+                          end = c(-0.1, 0.1, 1),
+                          colors = factor(c(1,3,2)))
+
+(plot_poptrends = 
+    ggplot(data = temp) +
+    geom_rect(data = data_breaks,
+              aes(xmin = start,
+                xmax = end,
+                ymin = - Inf,
+                ymax = Inf,
+                fill = colors), alpha = .2) +
+  geom_point(aes(y = pop, x = x1)) +
+  labs(y = "", x = "alpha i") +
+  geom_vline(xintercept = 0, lwd = .3) +
+  coord_cartesian(xlim = c(-1, 1)))
+```
+
+```{r}
+(plot_trenddensity = ggdensity(temp, x = "x1", add = "mean", rug = TRUE) +
+  coord_cartesian(xlim = c(-1, 1)) +
+  labs(title = "Distribution of alpha",
+       subtitle = paste0("Mean = ", 
+                         signif(mean(temp$x1), digits = 3),
+                        ", Variance = ", 
+                        signif(var(temp$x1), digits = 3)),
+       y = "Density", x = "Alpha"))
+```
+
+## Extract covariance between populations
+
+```{r, fig.width=12, fig.height = 12}
+# extract all estimated species-to-species associations matrix
+assoMat <- corRandomEff(m)
+
+# Average
+siteMean <- apply(assoMat[, , , 1], 1:2, mean)
+
+# Plot as heatmap
+corrplot::corrplot(siteMean, type = "lower",
+                   method = "color", 
+                   tl.cex = .4, tl.col = "black")
+```
+
+## Extract global population trend
+
+Note: this is *just* the temporal trend, without the latent variation or the residual error.
+
+### Average slope of the temporal trend in population size (LPI-pop)
+
+```{r}
+(lpipop = mean(coefs$paramX[,2]))
+(lpipop_ci = quantile(coefs$paramX[,2], probs = c(0.025, 0.975)))
+```
+
+### Variance in the temporal trend across populations (LPI-comm)
+
+```{r}
+(lpicomm = var(coefs$paramX[,2]))
+```
+
+So after accounting for the covariation between populations, an average population in this ensemble declined in size by 7.8% every year but the temporal trends vary a lot between populations ($\sigma^2$ = 0.11, so SD = 0.34).
+
+## Compare to LPI
+
+Importing results from the LPI calculated on the same dataset:
+
+```{r}
+rlpi_results <- readRDS("~/Documents/GitHub/hierarchical-lpi/outputs/rlpi_results.rds")
+rlpi_results$time <- as.integer(rownames(rlpi_results))
+rlpi_results <- rlpi_results[-nrow(rlpi_results),] # remove last value which is negative
+```
+
+
+```{r}
+A = ggplot() +
+  geom_ribbon(data = rlpi_results, 
+              aes(ymin = CI_low, ymax = CI_high, x = time), alpha = .3) + 
+  geom_line(data = rlpi_results, aes(x = time, y = LPI_final)) +
+  labs(title = "Living Planet Index", x = "Time", y = "LPI", 
+       caption = "Note: The LPI shows changes in population growth rates.")
+
+hmsc_predabundances = t(pred_quantiles) %>% as.data.frame()
+
+B = ggplot() +
+  geom_ribbon(data = hmsc_predabundances, 
+              aes(ymin = `2.5%`, ymax = `97.5%`, x = time), alpha = .3) + 
+  geom_line(aes(x = time, y = hmsc_predabundances$`50%`)) +
+  labs(title = "Predicted abundance trend from HMSC", x = "Time", y = "Median predicted abundance", caption = "Note: The HMSC model shows changes in population abundances.")
+
+A + B + plot_annotation(tag_levels = "a")
+```
+
+These two trends show different things: the LPI shows the overall trend in population _growth rates_, while the HMSC prediction shows the overall trend in population _abundance_.
+
+- Abundances are perhaps more intuitive to interpret - working with only the abundances removes the confusion of what the LPI represents (it's not abundances - so what is it? e.g. Puurtinen et al. 2021), and avoids the imbalanced weight of declines and growths that biases the geometrically averaged growth rate in the LPI.
+
+- The trend itself is pretty similar between the two methods - drastic decline in the 1980s to mid-1990s, followed by a lot of variation in the years that follow the big crash as populations readjust to the new community composition and structure. 
+
+The most important difference lies in the interpretation of the uncertainty intervals in each trend. 
+
+- In the LPI, the interval represents the 95% confidence interval around the mean trend, showing the variation among population trends that are included in the mean. In other words, this interval shows the spread of trends around the mean trend. Populations declined at similar steep rates in the 80s-90s, then follow a broader variety of trends in the years following the crash. However, this interval does not include any of the error from the data itself, as it does not retain any information about residual error from the modelling process. __It's a representation of how variable the sample is, rather than how _certain_ the trend is based on the data.__
+
+- The HMSC trend shows a credible interval around the median trend for the sample of populations, __which represents the uncertainty surrounding the trend due to variability in the data and the correlations between population abundance trends__, which were captured by the latent trend we introduced into the model. This means the credible interval is showing us the __statistical uncertainty surrounding the trend__, rather than a metric of how variable the trends are between populations.
+
+- Importantly, the HMSC interval is much wider than the LPI's confidence intervals, because of this difference in what it represents. This wider interval gives a much different impression of how certain we are in the population abundance trend - it is clear that certainty is variable through time, particularly at the beginning and end of the time series.
+
+The HMSC trend allows us to report quite a bit:
+
+- On average, population abundance declined during this time period (slope = `r round(lpipop, digits = 3)`). 
+- Populations' temporal trends were pretty variable (variance of the slope = `r round(lpicomm, digits = 3)`). The 95% credible interval around the slope was: `r round(lpipop_ci, digits = 3)`).
+
+This is what the overall trend in (scaled) population abundance looks like, with 95% credible intervals around the median trend:
+
+```{r, echo = F}
+B
+```
+
+Populations had different abundance trends, where some were declining, stable, or growing during this time period:
+
+```{r, echo = F}
+plot_poptrends
+```
+
+If we look at the distribution of these trends, we can see that most populations were declining during this time period:
+
+```{r, echo = F}
+plot_trenddensity
+```
+
+If we look at the residual correlations captured by the latent trend, we can see that populations were covarying strongly during this time period. Most populations' abundance fluctuations covaried positively (shown in __blue__, meaning their trends fluctuated similarly), though a few species' trends fluctuated separately from the other populations (in __red__, meaning they were negatively covarying):
+
+```{r, echo = F}
+# Plot as heatmap
+corrplot::corrplot(siteMean, type = "lower",
+                   method = "color", 
+                   tl.cex = .4, tl.col = "black")
+```
+
+For example, _Cottunculus microps_ (polar sculpin, a deepwater fish), _Cyclopterus lumpus_ (lumpfish), _Eumicrotremus sp._ (lumpfishes), and _Notacanthidae_ (deep sea spiny eels) all showed abundance trends that covaried negatively with the other populations in the ecosystem during this time period.
+
+To summarise, the hierarchical approach allows us to estimate:
+
+- The overall trend of population abundance for all populations simultaneously (LPI-pop), with a credible interval
+- The abundance trend for each population, allowing us to see which were declining, stable, or growing, with a credible interval for each
+- The variance in this overall trend, which tells us about how population change is unfolding at the community level (LPI-comm)
+- Correlations between populations' abundance trends (via latent variables)
