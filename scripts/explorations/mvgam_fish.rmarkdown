@@ -1,0 +1,272 @@
+---
+theme: litera
+---
+
+
+# Hierarchical GAM on population trends in Bayesian framework
+
+This is the model we are attempting to build, to apply to an ensemble of population time series:
+
+$$N_{i,t} = f(t, \alpha_i) + g(\lambda_i, \beta_i) + \varepsilon_i$$
+
+Where:
+
+- $N$ : population abundance estimate
+- $i$ : population
+- $t$ : time step
+
+- $f(t, \alpha_i)$ : function estimating the temporal trend in population size
+  - $\alpha$: estimated parameter describing each population's temporal slope
+- $g(\lambda, \beta_i)$ : function estimating latent variation in population size
+  - $\lambda$ : latent variable (to capture covariation between populations)
+  - $\beta$ : estimated parameter describing each population's latent variation
+- $\varepsilon$: residual variation
+
+Because the model also estimates latent variation, we are accounting for the covariation between populations when estimating $N$. 
+
+This model then contains key information to calculate and extend an index like the Living Planet Index, to show the average change in population size from a baseline value of 1 in the start year.
+
+The first part of the model estimates the temporal trend of each population's size ($\alpha_i$), which contains information about population-level change _and_ community-level change:
+
+$$\alpha_i \sim N(\mu_{\alpha}, \sigma^2_{\alpha}) $$
+
+where:
+- \mu_{\alpha} is the average population trend
+- \sigma^2_{\alpha} is the variance in this average trend, giving us a measure of how variable the population trends are within the sample.
+
+## Setting up
+
+
+```{r, include = FALSE}
+library(here)
+library(dplyr)
+library(tidyr)
+library(mgcv)
+library(tidymv)
+library(gratia)
+library(ggplot2)
+library(ggpubr)
+# devtools::install_github("nicholasjclark/mvgam")
+#remotes::install_github("stan-dev/cmdstanr")
+library(cmdstanr)
+library(mvgam)
+
+knitr::opts_chunk$set(message = FALSE, fig.align = 'center', fig.width = 8, warning = FALSE)
+
+theme_set(theme_pubr())
+```
+
+
+# Import time series of population abundances
+
+
+```{r}
+#### import & set up data ####
+
+# from https://github.com/eric-pedersen/groundfish-data-analysis
+# note: these are mean biomasses over the whole sampled area with an SE
+# not actually raw abundances. But for this purpose, should be ok
+load("~/Documents/GitHub/groundfish-data-analysis/data/year_geom_means.Rdata")
+
+time = rownames(Year_Geom_Means_all) %>% as.numeric()
+
+# get number of populations & length of time series
+npops <- ncol(Year_Geom_Means_all)
+tsl <- nrow(Year_Geom_Means_all)
+
+# scale biomass observations
+Year_Geom_Means = Year_Geom_Means %>% apply(2, scale, center = FALSE) %>% as.data.frame()
+
+# format into long
+Year_Geom_Means$time = time
+dat = pivot_longer(Year_Geom_Means, cols = -c(time), names_to = "series", values_to = "y")
+dat$series <- as.factor(dat$series)
+dat$time <- as.integer(dat$time)
+data_train = filter(dat, time < 2003)
+data_test = filter(dat, time >= 2003)
+
+ggplot(data_train) +
+  geom_line(aes(x = time, y = y, group = series, col = series), lwd = .5) +
+  theme(legend.position = "none")
+ggplot(data_test) +
+  geom_line(aes(x = time, y = y, group = series, col = series), lwd = .5) +
+  theme(legend.position = "none")
+```
+
+
+## Building the model 
+
+### Preparing the prior
+
+
+```{r, eval = F}
+# error
+mvgam_prior <- mvgam(data = data_train,
+               formula = y ~ s(time, bs = 'tp', k = 8) + s(series, bs = 're'),
+               family = "gaussian",
+               trend_model = 'AR1',
+               chains = 3,
+               use_stan = TRUE,
+               prior_simulation = TRUE)
+
+plot(mvgam_prior, type = 'smooths', realisations = TRUE)
+```
+
+
+Checking the default prior distributions for this model formulation:
+
+
+```{r, eval = F}
+# error about distribution
+test_priors <- get_mvgam_priors(y ~ s(time, bs = 'tp', k = 8) + s(series, bs = 're'),
+                                family = "gaussian",
+                                data = data_train,
+                                trend_model = 'AR1',
+                                use_stan = TRUE)
+test_priors %>% kableExtra::kable() %>% kableExtra::kable_styling(latex_options = "striped")
+```
+
+
+Any of the above priors can be changed by modifying the `prior` column and supplying the resulting `data.frame` to the `priors` argument in `mvgam()`.
+
+### Training the model on data
+
+Using the default priors:
+
+
+```{r, results='hide', cache = TRUE}
+mod1 <- mvgam(data = data_train,
+                newdata = data_test,
+                formula = y ~ s(time, bs = "tp", k = 8) + s(series, bs = 're'),
+                use_lv = TRUE,
+                n_lv = 1,
+                family = "gaussian",
+                trend_model = 'AR1',
+                use_stan = TRUE,
+                chains = 3,
+                burnin = 100,
+                samples = 2000)
+# takes about 180 seconds to execute
+# to view the Stan model file:
+# code(mod1)
+```
+
+```{r}
+plot(mod1)
+```
+
+
+### Trace plot
+
+
+```{r}
+rstan::stan_trace(mod1$model_output, 'rho')
+```
+
+
+For the latent trend:
+
+
+```{r}
+rstan::stan_trace(mod1$model_output, 'ar1')
+```
+
+
+
+### Posterior checks
+
+Is the model able to simulate data for the training period that looks realistic and unbiased?
+
+First, looking at histograms for the posterior retrodictions to compare to the histogram of observations (i.e. how well does the model predict the observed data?)
+
+
+```{r}
+for(i in 1:30){
+  ppc(mod1, series = i, type = 'hist')
+}
+```
+
+
+Then, comparing the simulated empirical Cumulative Distribution Functions (CDF) for posterior retrodictions (`yhat`) to the CDF of the observations (`y`):
+
+
+```{r}
+for(i in 1:30){
+  ppc(mod1, series = i, type = 'cdf')
+}
+```
+
+
+Then looking for biases in predictions, by examining a Probability Integral Transform (PIT) histogram: if our predictions are not biased one way or another (i.e. not consistently under- or over-predicting), this histogram should look roughly uniform:
+
+
+```{r}
+for(i in 1:30){
+  ppc(mod1, series = i, type = 'pit')
+}
+```
+
+
+### Plot the trends
+
+
+```{r, out.width="30%"}
+for(i in 1:30){
+plot_mvgam_trend(mod1, series = i)
+}
+```
+
+
+
+### Plot the time smooth
+
+
+```{r}
+# this smooth is the same for all species, so this just plots
+# the first one:
+plot_mvgam_smooth(object = mod1, series = 1, smooth = 'time')
+
+# for(i in 1:31){
+#   plot_mvgam_smooth(object = mod1, series = i, smooth = 'time')
+# }
+```
+
+
+### Plot the random effects per species
+
+
+```{r}
+plot_mvgam_randomeffects(object = mod1)
+```
+
+
+
+### Look at the correlations between species
+
+Thanks to the latent variable, we can pull out the correlations between species' abundance trends:
+
+
+```{r}
+sp_correlations = lv_correlations(mod1)
+
+# Plot as heatmap
+corrplot::corrplot(sp_correlations$mean_correlations, 
+                   type = "lower",
+                   method = "color", 
+                   tl.cex = .4, tl.col = "black")
+```
+
+```{r, include=FALSE, eval = TRUE}
+# pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_mod1_uncertainty.pdf", onefile = TRUE)
+# for(i in 1:30){
+#   plot_mvgam_uncertainty(mod1, series = i, newdata = data_test, legend_position = "none")
+# }
+# dev.off()
+# 
+# pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_mod1_trends.pdf", onefile = TRUE)
+# for(i in 1:30){
+#   plot_mvgam_trend(mod1, series = i, newdata = data_test, legend_position = "none")
+# }
+# dev.off()
+```
+
