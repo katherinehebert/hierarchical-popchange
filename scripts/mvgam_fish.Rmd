@@ -68,14 +68,15 @@ load("~/Documents/GitHub/groundfish-data-analysis/data/year_geom_means.Rdata")
 year = rownames(Year_Geom_Means_all) %>% as.numeric()
 
 # scale all columns
-Year_Geom_Means_all = apply(Year_Geom_Means_all, 2, scale, center = FALSE) %>%
-  as.data.frame()
+# Year_Geom_Means_all = apply(Year_Geom_Means_all, 2, scale, center = FALSE) %>%
+#   as.data.frame()
 Year_Geom_Means_all$time = year 
 df = Year_Geom_Means_all %>% 
   pivot_longer(cols = -time, 
                names_to = "series", 
                values_to = "y")
 df$series <- factor(df$series)
+df$y = df$y*10000
 df$y <- ceiling(df$y)
 
 # get number of populations & length of time series
@@ -108,9 +109,9 @@ mod1 <- mvgam(data = dat_train,
                 family = 'poisson',
                 trend_model = 'AR1',
                 use_stan = TRUE,
-                chains = 4,
-                burnin = 300,
-                samples = 400)
+                chains = 3,
+                burnin = 100,
+                samples = 500)
 ```
 
 ```{r}

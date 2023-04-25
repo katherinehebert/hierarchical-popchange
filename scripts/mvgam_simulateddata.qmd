@@ -54,7 +54,8 @@ library(ggpubr)
 library(cmdstanr)
 library(mvgam)
 
-knitr::opts_chunk$set(message = FALSE, fig.align = 'center', fig.width = 8, warning = FALSE)
+knitr::opts_chunk$set(message = FALSE, warning = FALSE,
+                      fig.align = 'center', fig.width = 8)
 
 theme_set(theme_pubr())
 ```
@@ -66,12 +67,13 @@ theme_set(theme_pubr())
 set.seed(2)
 dat <- sim_mvgam(T = 30,
                  n_series = 10,
-                 seasonality = "shared",
+                 seasonality = "hierarchical",
                  n_lv = 1,
-                 trend_model = 'AR1', # each time step depends on the previous one
+                 trend_model = 'RW',
                  family = 'poisson',
-                 mu_obs = 10,
-                 trend_rel = 0.7,
+                 mu_obs = 100,
+                 freq = 10,
+                 trend_rel = .8,
                  train_prop = 0.7)
 
 dat_train = dat$data_train
@@ -85,15 +87,29 @@ ggplot(dat_train) +
 
 ### Preparing the prior
 
-```{r, eval = F}
-# mvgam_prior <- mvgam(data = dat_train,
-#                formula = y ~ s(time, bs = 'tp', k = 20) + s(series, bs = 're'),
-#                family = 'poisson',
-#                trend_model = 'AR1',
-#                chains = 2,
-#                use_stan = TRUE,
-#                prior_simulation = TRUE)
-# this gives an error for some reason. check back on it
+The marginal contribution of the seasonal smooth function to the linear predictor (on the log scale:
+
+```{r, results='hide'}
+mvgam_prior <- mvgam(data = dat_train,
+               formula = y ~ s(time, bs = 'tp', k = 10) + s(series, bs = 're'),
+               family = 'poisson',
+               trend_model = 'AR1',
+               chains = 3,
+               use_stan = TRUE,
+               prior_simulation = TRUE)
+
+plot(mvgam_prior, type = 'smooths', realisations = TRUE)
+
+# more knots to make this more reasonable
+mvgam_prior <- mvgam(data = dat_train,
+               formula = y ~ s(time, bs = 'tp', k = 20) + s(series, bs = 're'),
+               family = 'poisson',
+               trend_model = 'AR1',
+               chains = 3,
+               use_stan = TRUE,
+               prior_simulation = TRUE)
+
+plot(mvgam_prior, type = 'smooths', realisations = TRUE)
 ```
 
 Checking the default prior distributions for this model formulation:
@@ -113,7 +129,7 @@ Any of the above priors can be changed by modifying the `prior` column and suppl
 
 Using the default priors:
 
-```{r, results='hide', cache = TRUE}
+```{r, results='hide', cache = FALSE}
 mod1 <- mvgam(data = dat_train,
                 newdata = dat_test,
                 formula = y ~ s(time, bs = "tp", k = 20) + s(series, bs = 're'),
@@ -124,7 +140,7 @@ mod1 <- mvgam(data = dat_train,
                 use_stan = TRUE,
                 chains = 3,
                 burnin = 100,
-                samples = 2000)
+                samples = 1000)
 
 # to view the Stan model file:
 # code(mod1)
@@ -132,6 +148,10 @@ mod1 <- mvgam(data = dat_train,
 
 ```{r}
 plot(mod1)
+```
+
+```{r}
+summary(mod1)
 ```
 
 ### Trace plot
@@ -199,17 +219,60 @@ corrplot::corrplot(sp_correlations$mean_correlations,
                    tl.cex = .4, tl.col = "black")
 ```
 
-```{r, include=FALSE, eval = TRUE}
-# pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_mod1_uncertainty.pdf", onefile = TRUE)
-# for(i in 1:30){
-#   plot_mvgam_uncertainty(mod1, series = i, newdata = dat_test, legend_position = "none")
-# }
-# dev.off()
-# 
-# pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_mod1_trends.pdf", onefile = TRUE)
-# for(i in 1:30){
-#   plot_mvgam_trend(mod1, series = i, newdata = dat_test, legend_position = "none")
-# }
-# dev.off()
+```{r, include=FALSE, eval = F}
+pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_mod1_uncertainty.pdf", onefile = TRUE)
+for(i in 1:30){
+  plot_mvgam_uncertainty(mod1, series = i, newdata = dat_test, legend_position = "none")
+}
+dev.off()
+
+pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_mod1_trends.pdf", onefile = TRUE)
+for(i in 1:30){
+  plot_mvgam_trend(mod1, series = i, newdata = dat_test, legend_position = "none")
+}
+dev.off()
+```
+
+Plot the latent trend for a specified series (in this case, 1):
+
+```{r}
+plot_mvgam_trend(object = mod1, series = 1)
+plot_mvgam_trend(object = mod1, series = 1, newdata = dat_test)
+plot_mvgam_trend(object = mod1, series = 1, newdata = dat_test, realisations = TRUE)
+```
+
+Plot the random effects (i.e. the population identity)
+
+```{r}
+plot_mvgam_randomeffects(mod1)
+```
+
+
+Get the betas
+
+```{r}
+betas = MCMCvis::MCMCsummary(mod1$model_output, 'b')
+rownames(betas) = names(mod1$mgcv_model$coefficients)
+
+betas_time = betas[grep("(time)", rownames(betas)),]
+betas_pops = betas[grep("(series)", rownames(betas)),]
+intercept = betas[1,]
+
+betas_pops$pops = rownames(betas_pops)
+betas_pops$pops = factor(betas_pops$pops, 
+                         levels = betas_pops$pops[order(betas_pops$mean, decreasing = TRUE)])
+ggplot(data = betas_pops, aes(y = pops)) +
+  geom_point(aes(x = `50%`)) +
+  geom_errorbarh(aes(xmin = `2.5%`, xmax = `97.5%`)) +
+  geom_vline(xintercept = 0, lty = 2) +
+  scale_x_continuous(limits = c(-1,1)) 
+```
+
+The variance of population trends in the sample:
+
+```{r}
+# will need to propagate from each trend tho
+betas_pops$`50%` %>% var()
+betas_pops$`50%` %>% range()
 ```
 

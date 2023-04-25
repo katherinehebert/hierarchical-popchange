@@ -33,12 +33,7 @@ where:
 - \mu_{\alpha} is the average population trend
 - \sigma^2_{\alpha} is the variance in this average trend, giving us a measure of how variable the population trends are within the sample.
 
-To calculate the index of change from a baseline of 1 (as in the LPI), the average population trend can then be plugged in to the LPI calculation as follows:
-
-$$ I_t = {\mu_{\alpha}}*t + 1 $$
-
-This trend can then be visualized and communicated with its known ($\sigma^2_{\alpha}$).
-
+## Setting up
 
 ```{r, include = FALSE}
 library(here)
@@ -59,12 +54,12 @@ knitr::opts_chunk$set(message = FALSE, fig.align = 'center', fig.width = 8, warn
 theme_set(theme_pubr())
 ```
 
-# Simulate discrete time series of population abundances
+# Import discrete time series of population abundances
 
 ```{r}
 # Import data
 set.seed(2)
-dat = readRDS("data/exampledata-CAMP2015.rds")
+dat = readRDS("~/Documents/GitHub/hierarchical-lpi/data/exampledata-CAMP2015.rds")
 
 dat_train = filter(dat, time > 2003 & time < 2008)
 dat_test = filter(dat, time >= 2008)
@@ -93,8 +88,8 @@ plot(mvgam_prior, type = 'smooths', realisations = TRUE)
 
 Checking the default prior distributions for this model formulation:
 
-```{r}
-test_priors <- get_mvgam_priors(y ~ s(time, bs = 'tp', k = 20) + s(series, bs = 're'),
+```{r, eval = F}
+test_priors <- get_mvgam_priors(y ~ s(time, bs = 'tp', k = 3) + s(series, bs = 're'),
                                 family = 'poisson',
                                 data = dat_train,
                                 trend_model = 'AR1',
@@ -111,7 +106,7 @@ Using the default priors:
 ```{r, results='hide', cache = TRUE}
 mod1 <- mvgam(data = dat_train,
                 newdata = dat_test,
-                formula = y ~ s(time, bs = "tp", k = 20) + s(series, bs = 're'),
+                formula = y ~ s(time, bs = "tp", k = 6) + s(series, bs = 're'),
                 use_lv = TRUE,
                 n_lv = 1,
                 family = 'poisson',
