@@ -97,6 +97,9 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <link href="mvgam_fish_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="mvgam_fish_files/libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
 
+<script src="mvgam_fish_files/libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="mvgam_fish_files/libs/lightable-0.0.1/lightable.css" rel="stylesheet">
+
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
 
 </head>
@@ -191,50 +194,161 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <section id="preparing-the-prior" class="level3">
 <h3 class="anchored" data-anchor-id="preparing-the-prior">Preparing the prior</h3>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># error</span></span>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>knots <span class="ot">=</span> <span class="dv">20</span></span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>mvgam_prior <span class="ot">&lt;-</span> <span class="fu">mvgam</span>(<span class="at">data =</span> data_train,</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>               <span class="at">formula =</span> y <span class="sc">~</span> <span class="fu">s</span>(time, <span class="at">bs =</span> <span class="st">'tp'</span>, <span class="at">k =</span> <span class="dv">8</span>) <span class="sc">+</span> <span class="fu">s</span>(series, <span class="at">bs =</span> <span class="st">'re'</span>),</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>               <span class="at">formula =</span> y <span class="sc">~</span> <span class="fu">s</span>(time, <span class="at">bs =</span> <span class="st">'tp'</span>, <span class="at">k =</span> knots) <span class="sc">+</span> <span class="fu">s</span>(series, <span class="at">bs =</span> <span class="st">'re'</span>),</span>
 <span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>               <span class="at">family =</span> <span class="st">"gaussian"</span>,</span>
 <span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>               <span class="at">trend_model =</span> <span class="st">'AR1'</span>,</span>
 <span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>               <span class="at">chains =</span> <span class="dv">3</span>,</span>
 <span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>               <span class="at">use_stan =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>               <span class="at">prior_simulation =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(mvgam_prior, <span class="at">type =</span> <span class="st">'smooths'</span>, <span class="at">realisations =</span> <span class="cn">TRUE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>               <span class="at">prior_simulation =</span> <span class="cn">TRUE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Running MCMC with 3 parallel chains...
+
+Chain 1 Iteration:   1 / 700 [  0%]  (Warmup) 
+Chain 2 Iteration:   1 / 700 [  0%]  (Warmup) 
+Chain 3 Iteration:   1 / 700 [  0%]  (Warmup) 
+Chain 3 Iteration: 100 / 700 [ 14%]  (Warmup) 
+Chain 1 Iteration: 100 / 700 [ 14%]  (Warmup) 
+Chain 2 Iteration: 100 / 700 [ 14%]  (Warmup) 
+Chain 3 Iteration: 200 / 700 [ 28%]  (Warmup) 
+Chain 3 Iteration: 201 / 700 [ 28%]  (Sampling) 
+Chain 1 Iteration: 200 / 700 [ 28%]  (Warmup) 
+Chain 2 Iteration: 200 / 700 [ 28%]  (Warmup) 
+Chain 2 Iteration: 201 / 700 [ 28%]  (Sampling) 
+Chain 1 Iteration: 201 / 700 [ 28%]  (Sampling) 
+Chain 2 Iteration: 300 / 700 [ 42%]  (Sampling) 
+Chain 3 Iteration: 300 / 700 [ 42%]  (Sampling) 
+Chain 2 Iteration: 400 / 700 [ 57%]  (Sampling) 
+Chain 1 Iteration: 300 / 700 [ 42%]  (Sampling) 
+Chain 2 Iteration: 500 / 700 [ 71%]  (Sampling) 
+Chain 3 Iteration: 400 / 700 [ 57%]  (Sampling) 
+Chain 2 Iteration: 600 / 700 [ 85%]  (Sampling) 
+Chain 1 Iteration: 400 / 700 [ 57%]  (Sampling) 
+Chain 3 Iteration: 500 / 700 [ 71%]  (Sampling) 
+Chain 2 Iteration: 700 / 700 [100%]  (Sampling) 
+Chain 2 finished in 73.6 seconds.
+Chain 3 Iteration: 600 / 700 [ 85%]  (Sampling) 
+Chain 1 Iteration: 500 / 700 [ 71%]  (Sampling) 
+Chain 3 Iteration: 700 / 700 [100%]  (Sampling) 
+Chain 3 finished in 99.7 seconds.
+Chain 1 Iteration: 600 / 700 [ 85%]  (Sampling) 
+Chain 1 Iteration: 700 / 700 [100%]  (Sampling) 
+Chain 1 finished in 124.4 seconds.
+
+All 3 chains finished successfully.
+Mean chain execution time: 99.2 seconds.
+Total execution time: 124.4 seconds.</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(mvgam_prior, <span class="at">type =</span> <span class="st">'smooths'</span>, <span class="at">realisations =</span> <span class="cn">TRUE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-3-1.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(mvgam_prior, <span class="at">type =</span> <span class="st">'smooths'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-3-2.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
 </div>
 <p>Checking the default prior distributions for this model formulation:</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># error about distribution</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>test_priors <span class="ot">&lt;-</span> <span class="fu">get_mvgam_priors</span>(y <span class="sc">~</span> <span class="fu">s</span>(time, <span class="at">bs =</span> <span class="st">'tp'</span>, <span class="at">k =</span> <span class="dv">8</span>) <span class="sc">+</span> <span class="fu">s</span>(series, <span class="at">bs =</span> <span class="st">'re'</span>),</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>                                <span class="at">family =</span> <span class="st">"gaussian"</span>,</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>                                <span class="at">data =</span> data_train,</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>                                <span class="at">trend_model =</span> <span class="st">'AR1'</span>,</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>                                <span class="at">use_stan =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>test_priors <span class="sc">%&gt;%</span> kableExtra<span class="sc">::</span><span class="fu">kable</span>() <span class="sc">%&gt;%</span> kableExtra<span class="sc">::</span><span class="fu">kable_styling</span>(<span class="at">latex_options =</span> <span class="st">"striped"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># error about distribution</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>test_priors <span class="ot">&lt;-</span> <span class="fu">get_mvgam_priors</span>(y <span class="sc">~</span> <span class="fu">s</span>(time, <span class="at">bs =</span> <span class="st">'tp'</span>, <span class="at">k =</span> knots) <span class="sc">+</span> <span class="fu">s</span>(series, <span class="at">bs =</span> <span class="st">'re'</span>),</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>                                <span class="at">family =</span> <span class="st">"gaussian"</span>,</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>                                <span class="at">data =</span> data_train,</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>                                <span class="at">trend_model =</span> <span class="st">'AR1'</span>,</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>                                <span class="at">use_stan =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>test_priors <span class="sc">%&gt;%</span> kableExtra<span class="sc">::</span><span class="fu">kable</span>() <span class="sc">%&gt;%</span> kableExtra<span class="sc">::</span><span class="fu">kable_styling</span>(<span class="at">latex_options =</span> <span class="st">"striped"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+
+<table class="table" style="margin-left: auto; margin-right: auto;">
+ <thead>
+  <tr>
+   <th style="text-align:left;"> param_name </th>
+   <th style="text-align:right;"> param_length </th>
+   <th style="text-align:left;"> param_info </th>
+   <th style="text-align:left;"> prior </th>
+   <th style="text-align:left;"> example_change </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> lambda&lt;lower=0&gt; </td>
+   <td style="text-align:right;"> 2 </td>
+   <td style="text-align:left;"> s(time) smooth parameters </td>
+   <td style="text-align:left;"> lambda ~ normal(10, 25); </td>
+   <td style="text-align:left;"> lambda ~ exponential(0.68); </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> mu_raw </td>
+   <td style="text-align:right;"> 1 </td>
+   <td style="text-align:left;"> s(series) pop mean </td>
+   <td style="text-align:left;"> mu_raw ~ std_normal(); </td>
+   <td style="text-align:left;"> mu_raw ~ normal(0.5, 0.79); </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> sigma_raw&lt;lower=0&gt; </td>
+   <td style="text-align:right;"> 1 </td>
+   <td style="text-align:left;"> s(series) pop sd </td>
+   <td style="text-align:left;"> sigma_raw ~ exponential(0.5); </td>
+   <td style="text-align:left;"> sigma_raw ~ exponential(0.65); </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ar1 </td>
+   <td style="text-align:right;"> 30 </td>
+   <td style="text-align:left;"> trend AR1 coefficient </td>
+   <td style="text-align:left;"> ar1 ~ std_normal(); </td>
+   <td style="text-align:left;"> ar1 ~ normal(-0.7, 0.35); </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> sigma&lt;lower=0&gt; </td>
+   <td style="text-align:right;"> 30 </td>
+   <td style="text-align:left;"> trend sd </td>
+   <td style="text-align:left;"> sigma ~ exponential(2); </td>
+   <td style="text-align:left;"> sigma ~ exponential(0.54); </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> sigma_obs&lt;lower=0&gt; </td>
+   <td style="text-align:right;"> 30 </td>
+   <td style="text-align:left;"> observation error sd </td>
+   <td style="text-align:left;"> sigma_obs ~ student_t(3, 0, 2); </td>
+   <td style="text-align:left;"> sigma_obs ~ normal(-0.8, 0.23); </td>
+  </tr>
+</tbody>
+</table>
+
+</div>
 </div>
 <p>Any of the above priors can be changed by modifying the <code>prior</code> column and supplying the resulting <code>data.frame</code> to the <code>priors</code> argument in <code>mvgam()</code>.</p>
 </section>
 <section id="training-the-model-on-data" class="level3">
 <h3 class="anchored" data-anchor-id="training-the-model-on-data">Training the model on data</h3>
 <p>Using the default priors:</p>
-<div class="cell" data-layout-align="center" data-hash="mvgam_fish_cache/html/unnamed-chunk-5_4078ba5f0d0816d2ecf73699b0c32c74">
-<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>mod1 <span class="ot">&lt;-</span> <span class="fu">mvgam</span>(<span class="at">data =</span> data_train,</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>                <span class="at">newdata =</span> data_test,</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>                <span class="at">formula =</span> y <span class="sc">~</span> <span class="fu">s</span>(time, <span class="at">bs =</span> <span class="st">"tp"</span>, <span class="at">k =</span> <span class="dv">8</span>) <span class="sc">+</span> <span class="fu">s</span>(series, <span class="at">bs =</span> <span class="st">'re'</span>),</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>                <span class="at">use_lv =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>                <span class="at">n_lv =</span> <span class="dv">1</span>,</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>                <span class="at">family =</span> <span class="st">"gaussian"</span>,</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>                <span class="at">trend_model =</span> <span class="st">'AR1'</span>,</span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>                <span class="at">use_stan =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>                <span class="at">chains =</span> <span class="dv">3</span>,</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>                <span class="at">burnin =</span> <span class="dv">100</span>,</span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>                <span class="at">samples =</span> <span class="dv">2000</span>)</span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="co"># takes about 180 seconds to execute</span></span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="co"># to view the Stan model file:</span></span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="co"># code(mod1)</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell" data-layout-align="center" data-hash="mvgam_fish_cache/html/unnamed-chunk-5_1c2b2217b85d06c678a51a35356fba74">
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>mod1 <span class="ot">&lt;-</span> <span class="fu">mvgam</span>(<span class="at">data =</span> data_train,</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>                <span class="at">newdata =</span> data_test,</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>                <span class="at">formula =</span> y <span class="sc">~</span> <span class="fu">s</span>(time, <span class="at">bs =</span> <span class="st">"tp"</span>, <span class="at">k =</span> knots) <span class="sc">+</span> <span class="fu">s</span>(series, <span class="at">bs =</span> <span class="st">'re'</span>),</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>                <span class="at">use_lv =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>                <span class="at">n_lv =</span> <span class="dv">1</span>,</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>                <span class="at">family =</span> <span class="st">"gaussian"</span>,</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>                <span class="at">trend_model =</span> <span class="st">'AR1'</span>,</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>                <span class="at">use_stan =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>                <span class="at">chains =</span> <span class="dv">3</span>,</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>                <span class="at">burnin =</span> <span class="dv">100</span>,</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>                <span class="at">samples =</span> <span class="dv">2000</span>)</span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a><span class="co"># takes about 180 seconds to execute</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a><span class="co"># to view the Stan model file:</span></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a><span class="co"># code(mod1)</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(mod1)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(mod1)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
@@ -247,7 +361,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <section id="trace-plot" class="level3">
 <h3 class="anchored" data-anchor-id="trace-plot">Trace plot</h3>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>rstan<span class="sc">::</span><span class="fu">stan_trace</span>(mod1<span class="sc">$</span>model_output, <span class="st">'rho'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>rstan<span class="sc">::</span><span class="fu">stan_trace</span>(mod1<span class="sc">$</span>model_output, <span class="st">'rho'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
@@ -258,7 +372,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </div>
 <p>For the latent trend:</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>rstan<span class="sc">::</span><span class="fu">stan_trace</span>(mod1<span class="sc">$</span>model_output, <span class="st">'ar1'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>rstan<span class="sc">::</span><span class="fu">stan_trace</span>(mod1<span class="sc">$</span>model_output, <span class="st">'ar1'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
@@ -273,9 +387,9 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p>Is the model able to simulate data for the training period that looks realistic and unbiased?</p>
 <p>First, looking at histograms for the posterior retrodictions to compare to the histogram of observations (i.e.&nbsp;how well does the model predict the observed data?)</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span>(i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span>){</span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ppc</span>(mod1, <span class="at">series =</span> i, <span class="at">type =</span> <span class="st">'hist'</span>)</span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span>(i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span>){</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ppc</span>(mod1, <span class="at">series =</span> i, <span class="at">type =</span> <span class="st">'hist'</span>)</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
@@ -489,9 +603,9 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </div>
 <p>Then, comparing the simulated empirical Cumulative Distribution Functions (CDF) for posterior retrodictions (<code>yhat</code>) to the CDF of the observations (<code>y</code>):</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span>(i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span>){</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ppc</span>(mod1, <span class="at">series =</span> i, <span class="at">type =</span> <span class="st">'cdf'</span>)</span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span>(i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span>){</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ppc</span>(mod1, <span class="at">series =</span> i, <span class="at">type =</span> <span class="st">'cdf'</span>)</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
@@ -705,9 +819,9 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </div>
 <p>Then looking for biases in predictions, by examining a Probability Integral Transform (PIT) histogram: if our predictions are not biased one way or another (i.e.&nbsp;not consistently under- or over-predicting), this histogram should look roughly uniform:</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span>(i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span>){</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ppc</span>(mod1, <span class="at">series =</span> i, <span class="at">type =</span> <span class="st">'pit'</span>)</span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span>(i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span>){</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ppc</span>(mod1, <span class="at">series =</span> i, <span class="at">type =</span> <span class="st">'pit'</span>)</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
@@ -923,216 +1037,216 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <section id="plot-the-trends" class="level3">
 <h3 class="anchored" data-anchor-id="plot-the-trends">Plot the trends</h3>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span>(i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span>){</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_mvgam_trend</span>(mod1, <span class="at">series =</span> i)</span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span>(i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span>){</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_mvgam_trend</span>(mod1, <span class="at">series =</span> i, <span class="at">derivatives =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-1.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-1.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-2.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-2.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-3.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-3.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-4.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-4.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-5.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-5.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-6.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-6.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-7.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-7.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-8.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-8.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-9.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-9.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-10.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-10.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-11.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-11.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-12.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-12.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-13.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-13.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-14.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-14.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-15.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-15.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-16.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-16.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-17.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-17.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-18.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-18.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-19.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-19.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-20.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-20.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-21.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-21.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-22.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-22.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-23.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-23.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-24.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-24.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-25.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-25.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-26.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-26.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-27.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-27.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-28.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-28.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-29.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-29.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-30.png" class="img-fluid figure-img" style="width:30.0%"></p>
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-12-30.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>
@@ -1141,9 +1255,9 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <section id="plot-the-time-smooth" class="level3">
 <h3 class="anchored" data-anchor-id="plot-the-time-smooth">Plot the time smooth</h3>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># this smooth is the same for all species, so this just plots</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="co"># the first one:</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_mvgam_smooth</span>(<span class="at">object =</span> mod1, <span class="at">series =</span> <span class="dv">1</span>, <span class="at">smooth =</span> <span class="st">'time'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span>(i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span>){</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plot_mvgam_smooth</span>(<span class="at">object =</span> mod1, <span class="at">series =</span> i, <span class="at">smooth =</span> <span class="st">'time'</span>, <span class="at">residuals =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
@@ -1151,15 +1265,215 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </figure>
 </div>
 </div>
-<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co"># for(i in 1:31){</span></span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="co">#   plot_mvgam_smooth(object = mod1, series = i, smooth = 'time')</span></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="co"># }</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-2.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-3.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-4.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-5.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-6.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-7.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-8.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-9.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-10.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-11.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-12.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-13.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-14.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-15.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-16.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-17.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-18.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-19.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-20.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-21.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-22.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-23.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-24.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-25.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-26.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-27.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-28.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-29.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-13-30.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
 </div>
 </section>
 <section id="plot-the-random-effects-per-species" class="level3">
 <h3 class="anchored" data-anchor-id="plot-the-random-effects-per-species">Plot the random effects per species</h3>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_mvgam_randomeffects</span>(<span class="at">object =</span> mod1)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_mvgam_randomeffects</span>(<span class="at">object =</span> mod1)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
@@ -1173,17 +1487,65 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <h3 class="anchored" data-anchor-id="look-at-the-correlations-between-species">Look at the correlations between species</h3>
 <p>Thanks to the latent variable, we can pull out the correlations between species’ abundance trends:</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>sp_correlations <span class="ot">=</span> <span class="fu">lv_correlations</span>(mod1)</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot as heatmap</span></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>corrplot<span class="sc">::</span><span class="fu">corrplot</span>(sp_correlations<span class="sc">$</span>mean_correlations, </span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>                   <span class="at">type =</span> <span class="st">"lower"</span>,</span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>                   <span class="at">method =</span> <span class="st">"color"</span>, </span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>                   <span class="at">tl.cex =</span> .<span class="dv">4</span>, <span class="at">tl.col =</span> <span class="st">"black"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>sp_correlations <span class="ot">=</span> <span class="fu">lv_correlations</span>(mod1)</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot as heatmap</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>corrplot<span class="sc">::</span><span class="fu">corrplot</span>(sp_correlations<span class="sc">$</span>mean_correlations, </span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>                   <span class="at">type =</span> <span class="st">"lower"</span>,</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>                   <span class="at">method =</span> <span class="st">"color"</span>, </span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>                   <span class="at">tl.cex =</span> .<span class="dv">4</span>, <span class="at">tl.col =</span> <span class="st">"black"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
 <p><img src="mvgam_fish_files/figure-html/unnamed-chunk-15-1.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="a-quick-look-at-the-data" class="level3">
+<h3 class="anchored" data-anchor-id="a-quick-look-at-the-data">A quick look at the data</h3>
+<p>Let’s quickly look at the data for some of the populations in this assemblage:</p>
+<p><strong>Atlantic Cod</strong> (<em>Gadus Morhua</em>)</p>
+<div class="cell" data-layout-align="center">
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(mod1, <span class="at">type =</span> <span class="st">"series"</span>, <span class="at">data_train =</span> data_train, <span class="at">series =</span> <span class="dv">10</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-17-1.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+</div>
+<p><strong>Greenland halibut</strong> (<em>Reinhardtius hippoglossoides</em>)</p>
+<div class="cell" data-layout-align="center">
+<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(mod1, <span class="at">type =</span> <span class="st">"series"</span>, <span class="at">data_train =</span> data_train, <span class="at">series =</span> <span class="dv">26</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-18-1.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+</div>
+<p><strong>American plaice</strong> (<em>Hippoglossoides platessoides</em>)</p>
+<div class="cell" data-layout-align="center">
+<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(mod1, <span class="at">type =</span> <span class="st">"series"</span>, <span class="at">data_train =</span> data_train, <span class="at">series =</span> <span class="dv">12</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-19-1.png" class="img-fluid figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+</div>
+<p><strong>Deepwater redfish</strong> (<em>Sebastes mentella</em>)</p>
+<div class="cell" data-layout-align="center">
+<div class="sourceCode cell-code" id="cb22"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(mod1, <span class="at">type =</span> <span class="st">"series"</span>, <span class="at">data_train =</span> data_train, <span class="at">series =</span> <span class="dv">28</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="mvgam_fish_files/figure-html/unnamed-chunk-20-1.png" class="img-fluid figure-img" width="768"></p>
 </figure>
 </div>
 </div>

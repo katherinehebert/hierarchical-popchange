@@ -93,10 +93,10 @@ ggplot(data_test) +
 
 ### Preparing the prior
 
-```{r, eval = F}
-# error
+```{r, eval = TRUE}
+knots = 20
 mvgam_prior <- mvgam(data = data_train,
-               formula = y ~ s(time, bs = 'tp', k = 8) + s(series, bs = 're'),
+               formula = y ~ s(time, bs = 'tp', k = knots) + s(series, bs = 're'),
                family = "gaussian",
                trend_model = 'AR1',
                chains = 3,
@@ -104,13 +104,14 @@ mvgam_prior <- mvgam(data = data_train,
                prior_simulation = TRUE)
 
 plot(mvgam_prior, type = 'smooths', realisations = TRUE)
+plot(mvgam_prior, type = 'smooths')
 ```
 
 Checking the default prior distributions for this model formulation:
 
-```{r, eval = F}
+```{r, eval = TRUE}
 # error about distribution
-test_priors <- get_mvgam_priors(y ~ s(time, bs = 'tp', k = 8) + s(series, bs = 're'),
+test_priors <- get_mvgam_priors(y ~ s(time, bs = 'tp', k = knots) + s(series, bs = 're'),
                                 family = "gaussian",
                                 data = data_train,
                                 trend_model = 'AR1',
@@ -127,7 +128,7 @@ Using the default priors:
 ```{r, results='hide', cache = TRUE}
 mod1 <- mvgam(data = data_train,
                 newdata = data_test,
-                formula = y ~ s(time, bs = "tp", k = 8) + s(series, bs = 're'),
+                formula = y ~ s(time, bs = "tp", k = knots) + s(series, bs = 're'),
                 use_lv = TRUE,
                 n_lv = 1,
                 family = "gaussian",
@@ -188,9 +189,9 @@ for(i in 1:30){
 
 ### Plot the trends
 
-```{r, out.width="30%"}
+```{r}
 for(i in 1:30){
-plot_mvgam_trend(mod1, series = i)
+plot_mvgam_trend(mod1, series = i, derivatives = TRUE)
 }
 ```
 
@@ -198,13 +199,9 @@ plot_mvgam_trend(mod1, series = i)
 ### Plot the time smooth
 
 ```{r}
-# this smooth is the same for all species, so this just plots
-# the first one:
-plot_mvgam_smooth(object = mod1, series = 1, smooth = 'time')
-
-# for(i in 1:31){
-#   plot_mvgam_smooth(object = mod1, series = i, smooth = 'time')
-# }
+for(i in 1:30){
+  plot_mvgam_smooth(object = mod1, series = i, smooth = 'time', residuals = TRUE)
+}
 ```
 
 ### Plot the random effects per species
@@ -240,5 +237,33 @@ corrplot::corrplot(sp_correlations$mean_correlations,
 #   plot_mvgam_trend(mod1, series = i, newdata = data_test, legend_position = "none")
 # }
 # dev.off()
+```
+
+### A quick look at the data
+
+Let's quickly look at the data for some of the populations in this assemblage:
+
+__Atlantic Cod__ (_Gadus Morhua_)
+
+```{r}
+plot(mod1, type = "series", data_train = data_train, series = 10)
+```
+
+__Greenland halibut__ (_Reinhardtius hippoglossoides_)
+
+```{r}
+plot(mod1, type = "series", data_train = data_train, series = 26)
+```
+
+__American plaice__ (_Hippoglossoides platessoides_)
+
+```{r}
+plot(mod1, type = "series", data_train = data_train, series = 12)
+```
+
+__Deepwater redfish__ (_Sebastes mentella_)
+
+```{r}
+plot(mod1, type = "series", data_train = data_train, series = 28)
 ```
 
