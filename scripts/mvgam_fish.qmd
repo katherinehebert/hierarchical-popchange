@@ -78,25 +78,29 @@ Year_Geom_Means$time = time
 dat = pivot_longer(Year_Geom_Means, cols = -c(time), names_to = "series", values_to = "y")
 dat$series <- as.factor(dat$series)
 dat$time <- as.integer(dat$time)
-data_train = filter(dat, time < 2003)
-data_test = filter(dat, time >= 2003)
+
+data_train = dat
+#data_train = filter(dat, time < 2003)
+#data_test = filter(dat, time >= 2003)
 
 ggplot(data_train) +
   geom_line(aes(x = time, y = y, group = series, col = series), lwd = .5) +
   theme(legend.position = "none")
-ggplot(data_test) +
-  geom_line(aes(x = time, y = y, group = series, col = series), lwd = .5) +
-  theme(legend.position = "none")
+# ggplot(data_test) +
+#   geom_line(aes(x = time, y = y, group = series, col = series), lwd = .5) +
+#   theme(legend.position = "none")
 ```
 
 ## Building the model 
 
 ### Preparing the prior
 
-```{r, eval = TRUE}
+```{r, eval = TRUE, cache = FALSE}
 knots = 20
 mvgam_prior <- mvgam(data = data_train,
-               formula = y ~ s(time, bs = 'tp', k = knots) + s(series, bs = 're'),
+               formula = y ~ s(time, bs = "tp", k = knots) + 
+                s(time, by = series, bs = "tp", m = 1) +
+                s(series, bs = 're'),
                family = "gaussian",
                trend_model = 'AR1',
                chains = 3,
@@ -109,9 +113,10 @@ plot(mvgam_prior, type = 'smooths')
 
 Checking the default prior distributions for this model formulation:
 
-```{r, eval = TRUE}
-# error about distribution
-test_priors <- get_mvgam_priors(y ~ s(time, bs = 'tp', k = knots) + s(series, bs = 're'),
+```{r, eval = TRUE, cache = FALSE}
+test_priors <- get_mvgam_priors(y ~ s(time, bs = "tp", k = knots) + 
+                s(time, by = series, bs = "tp", m = 1) +
+                s(series, bs = 're'),
                                 family = "gaussian",
                                 data = data_train,
                                 trend_model = 'AR1',
@@ -125,10 +130,13 @@ Any of the above priors can be changed by modifying the `prior` column and suppl
 
 Using the default priors:
 
-```{r, results='hide', cache = TRUE}
+```{r, results='hide', cache = FALSE}
 mod1 <- mvgam(data = data_train,
-                newdata = data_test,
-                formula = y ~ s(time, bs = "tp", k = knots) + s(series, bs = 're'),
+              # model GI from Pedersen 2019
+              # A single common smoother plus group-level smoothers with differing wiggliness (Model GI)
+                formula = y ~ s(time, bs = "tp", k = knots) + 
+                s(time, by = series, bs = "tp", m = 1) +
+                s(series, bs = 're'),
                 use_lv = TRUE,
                 n_lv = 1,
                 family = "gaussian",
@@ -136,8 +144,8 @@ mod1 <- mvgam(data = data_train,
                 use_stan = TRUE,
                 chains = 3,
                 burnin = 100,
-                samples = 2000)
-# takes about 180 seconds to execute
+                samples = 500
+                )
 # to view the Stan model file:
 # code(mod1)
 ```
@@ -166,6 +174,7 @@ Is the model able to simulate data for the training period that looks realistic 
 First, looking at histograms for the posterior retrodictions to compare to the histogram of observations (i.e. how well does the model predict the observed data?)
 
 ```{r}
+pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_ppc_hist.pdf", onefile = TRUE)
 for(i in 1:30){
   ppc(mod1, series = i, type = 'hist')
 }
@@ -174,6 +183,7 @@ for(i in 1:30){
 Then, comparing the simulated empirical Cumulative Distribution Functions (CDF) for posterior retrodictions (`yhat`) to the CDF of the observations (`y`):
 
 ```{r}
+pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_ppc_cdf.pdf", onefile = TRUE)
 for(i in 1:30){
   ppc(mod1, series = i, type = 'cdf')
 }
@@ -182,6 +192,7 @@ for(i in 1:30){
 Then looking for biases in predictions, by examining a Probability Integral Transform (PIT) histogram: if our predictions are not biased one way or another (i.e. not consistently under- or over-predicting), this histogram should look roughly uniform:
 
 ```{r}
+pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_ppc_pit.pdf", onefile = TRUE)
 for(i in 1:30){
   ppc(mod1, series = i, type = 'pit')
 }
@@ -198,10 +209,12 @@ plot_mvgam_trend(mod1, series = i, derivatives = TRUE)
 
 ### Plot the time smooth
 
-```{r}
+```{r, fig.show='hold', out.width="33%"}
+pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_plot_smooth.pdf", onefile = TRUE)
 for(i in 1:30){
   plot_mvgam_smooth(object = mod1, series = i, smooth = 'time', residuals = TRUE)
 }
+dev.off()
 ```
 
 ### Plot the random effects per species
@@ -241,29 +254,10 @@ corrplot::corrplot(sp_correlations$mean_correlations,
 
 ### A quick look at the data
 
-Let's quickly look at the data for some of the populations in this assemblage:
-
-__Atlantic Cod__ (_Gadus Morhua_)
-
 ```{r}
-plot(mod1, type = "series", data_train = data_train, series = 10)
+pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_plot_timeseries.pdf", onefile = TRUE)
+for(i in 1:30){
+  plot(mod1, type = "series", data_train = data_train, series = i)
+}
+dev.off()
 ```
-
-__Greenland halibut__ (_Reinhardtius hippoglossoides_)
-
-```{r}
-plot(mod1, type = "series", data_train = data_train, series = 26)
-```
-
-__American plaice__ (_Hippoglossoides platessoides_)
-
-```{r}
-plot(mod1, type = "series", data_train = data_train, series = 12)
-```
-
-__Deepwater redfish__ (_Sebastes mentella_)
-
-```{r}
-plot(mod1, type = "series", data_train = data_train, series = 28)
-```
-
