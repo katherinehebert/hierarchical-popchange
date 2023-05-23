@@ -13,6 +13,8 @@ library(patchwork)
 library(ggridges)
 theme_set(theme_pubr())
 
+set.seed(12)
+
 # data ----
 
 load("~/Documents/GitHub/groundfish-data-analysis/data/year_geom_means.Rdata")
@@ -26,6 +28,7 @@ tsl <- nrow(Year_Geom_Means_all)
 
 biomass <- Year_Geom_Means_all %>% apply(2, scale, center = FALSE)
 matplot(biomass, type = "l")
+saveRDS(biomass, "outputs/biomass.rds")
 
 ################################################################################
 
@@ -97,11 +100,14 @@ pred_q975_l <- pred$q975 |> as.data.frame() |>
   pivot_longer(cols = -year, values_to = "pred_biomass_q975", names_to = "pop")
 
 pred_l <- left_join(pred_l, pred_q025_l) |> left_join(pred_q975_l)
+# save model
+saveRDS(pred_l, "outputs/linear_hierarchical_pred_l.RDS")
 
 # convert biomass to long, to plot in the background
 biomass_l = as.data.frame(biomass) |> 
   mutate("year" = time+1981) |>
   tidyr::pivot_longer(cols = -year, names_to = "pop", values_to = "biomass")
+saveRDS(biomass_l, "outputs/biomass_l.rds")
 
 # plot predicted trend over the real trend for each population
 ggplot() + 
@@ -126,6 +132,7 @@ population_trends = as.data.frame(cbind(paramX_mean, paramX_sd))
 population_trends$pop = rownames(population_trends)
 population_trends$pop <- factor(population_trends$pop, 
                                 levels = population_trends$pop[order(population_trends$x1)])
+saveRDS(population_trends, "outputs/linear_hierarchical_population_trends.rds")
 
 data_breaks <- data.frame(start = c(-1, -0.1, 0.1),  # Create data with breaks
                           end = c(-0.1, 0.1, 1),
@@ -202,6 +209,9 @@ df_overall = data.frame(
   "q025" = overall_pred$overall_q025,
   "q975" = overall_pred$overall_q975
 )
+# save 
+saveRDS(df_overall, "outputs/linear_hierarchical_df_overall.RDS")
+
 ggplot() +
   geom_ribbon(data = pred_l,
               aes(x = year, group = pop, ymin = pred_biomass_q025, ymax = pred_biomass_q975), alpha = .3, fill = "salmon") +
@@ -225,6 +235,7 @@ siteUpper <- apply(assoMat[, , , 1], 1:2, quantile, prob = c(0.975))
 # black out the weakest associations (that overlap with 0)
 #siteMean[which(siteLower <= 0 & siteUpper >= 0)] <- NA
 
+plot.new()
 # Plot as heatmap
 corrplot::corrplot(siteMean, type = "lower",
                    method = "color", 
@@ -235,5 +246,6 @@ corrplot::corrplot(siteMean, type = "lower",
 
 # plot as an ordination to see associations between years, or between species (or both)
 source("scripts/biplot.hmsc.R")
+plot.new()
 biplot.hmsc(m, Random = 1, display = "sites", type = c("text", "points"), randomeff_names = as.character(time+1981))
 biplot.hmsc(m, Random = 1, display = "species", type = "text", species_names = colnames(YData))

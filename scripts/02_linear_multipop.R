@@ -13,6 +13,8 @@ library(ggridges)
 library(patchwork)
 theme_set(theme_pubr())
 
+set.seed(12)
+
 # data ----
 
 load("~/Documents/GitHub/groundfish-data-analysis/data/year_geom_means.Rdata")
@@ -95,6 +97,8 @@ pred_q975_l <- pred$q975 |> as.data.frame() |>
   pivot_longer(cols = -year, values_to = "pred_biomass_q975", names_to = "pop")
 
 pred_l <- left_join(pred_l, pred_q025_l) |> left_join(pred_q975_l)
+# save model
+saveRDS(pred_l, "outputs/linear_multipop_pred_l.RDS")
 
 # convert biomass to long, to plot in the background
 biomass_l = as.data.frame(biomass) |> 
@@ -120,9 +124,10 @@ paramX_mean = m$results$estimation$paramX |> apply(1:2, mean) # this is the same
 paramX_sd = m$results$estimation$paramX |> apply(1:2, sd)
 colnames(paramX_sd) = paste0(colnames(paramX_sd), "_SD")
 
-population_trends = as.data.frame(coefs$paramX)
+population_trends = as.data.frame(cbind(paramX_mean, paramX_sd))
 population_trends$pop = rownames(population_trends)
 population_trends$pop <- factor(population_trends$pop, levels = population_trends$pop[order(population_trends$x1)])
+saveRDS(population_trends, "outputs/linear_multipop_population_trends.rds")
 
 data_breaks <- data.frame(start = c(-1, -0.05, 0.05),  # Create data with breaks
                           end = c(-0.05, 0.05, 1),
@@ -197,6 +202,9 @@ df_overall = data.frame(
   "q025" = overall_pred$overall_q025,
   "q975" = overall_pred$overall_q975
 )
+# save 
+saveRDS(df_overall, "outputs/linear_multipop_df_overall.RDS")
+
 ggplot() +
   geom_ribbon(data = pred_l,
               aes(x = year, group = pop, ymin = pred_biomass_q025, ymax = pred_biomass_q975), alpha = .3, fill = "salmon") +
