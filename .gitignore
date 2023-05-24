@@ -59,3 +59,4 @@ scripts/hmsc_fish_files/
 scripts/mvgam_exampledata_files/
 scripts/mvgam_fish_files/
 outputs/linear_singlepop/model_*
+outputs/gam_singlepop/model_*
