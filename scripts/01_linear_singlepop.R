@@ -5,14 +5,10 @@
 
 library(here)
 library(dplyr)
-library(cmdstanr)
-library(rstan)
+library(brms)
 library(tidybayes)
-library(bayesplot)
 library(ggplot2)
-library(ggridges)
 library(ggpubr)
-library(patchwork)
 theme_set(theme_pubr())
 
 set.seed(12)
@@ -28,61 +24,20 @@ time <- time-min(time)
 npops <- ncol(Year_Geom_Means_all)
 tsl <- nrow(Year_Geom_Means_all)
 
-biomass <- Year_Geom_Means_all %>% apply(2, scale, center = FALSE)
+biomass <- Year_Geom_Means_all %>% apply(2, scale, center = TRUE)
 matplot(biomass, type = "l")
-
-################################################################################
-
-# simulate some priors ----
-
-# need better priors...
-prior_biomass = list()
-for(i in 1:tsl){
-  prior_alpha = rlnorm(1, 0, .5)
-  prior_beta_year = rnorm(1, 0, .1)
-  prior_sigma = rexp(1, 1)
-  (prior_mus = prior_alpha + prior_beta_year * time)
-  prior_biomass[[i]] = rnorm(100, mean = prior_mus[i], sd = prior_sigma)
-}
-par(mfrow=c(1,2))
-boxplot(prior_biomass)
-boxplot(t(biomass))
-
 
 ################################################################################
 
 # linear model per population ----
 
-# compile the model coded in Stan
-m = cmdstan_model(stan_file = "scripts/linear_singlepop.stan", pedantic = TRUE)
-
-# fit the model with the data
-m_fit = vector("list", npops)
 for(i in 1:npops){
-  # make a data list for the model
-  m_data = list(
-    n = tsl,
-    biomass = biomass[,i],
-    year = time,
-    npost = tsl
+  df = data.frame(
+    "biomass" = biomass[,i],
+    "time" = time
   )
-  # sample from the model
-  m_fit[[i]] = m$sample(data = m_data)
-  
-  # save
-  m_fit[[i]]$save_object(file = paste0("outputs/linear_singlepop/model_", i, ".rds"))
-}
-
-
-## posterior predictive checks ----
-
-par(mfrow = c(3,2))
-draws_matrix <- list()
-for(i in 1:npops){
-  draws <- m_fit[[i]]$draws(variables = c("y_rep"))
-  draws_matrix[[i]] <- posterior::as_draws_matrix(draws)
-  bayesplot::ppc_dens_overlay(y = biomass[,i],
-                              yrep = head(draws_matrix[[i]], 50)) |> print()
+  m = brm(biomass ~ time + 1, data = df)
+  saveRDS(m, paste0("outputs/linear_singlepop/model_", i, ".rds"))
 }
 
 
@@ -91,47 +46,66 @@ for(i in 1:npops){
 posterior_ls = list()
 par(mfrow = c(3,2))
 for(i in 1:npops){
-  m_fit_temp <- read_stan_csv(m_fit[[i]]$output_files())
-  posterior <- as.data.frame(m_fit_temp)
+  # Read in the model 
+  m = readRDS(paste0("outputs/linear_singlepop/model_", i, ".rds"))
+  m_data = m$data
+  
+  # extract posterior draws in an array format
+  (draws_fit <- as_draws_matrix(m))
+  post = posterior::summarize_draws(draws_fit)
   
   # plot the fitted Line
   p = ggplot() +
-    geom_point(aes(x = m_data$year, y = biomass[,i])) +
-    stat_function(fun = function(x) mean(posterior$alpha) + mean(posterior$beta_year) * x)
+    geom_point(data = m_data, aes(x = time, y = biomass)) +
+    stat_function(fun = function(x) post$mean[1] + post$mean[2] * x)
   print(p)
   
-  posterior_ls[[i]] = posterior
+  posterior_ls[[i]] = post
 }
 names(posterior_ls) = colnames(biomass)
+posterior <- bind_rows(posterior_ls, .id = "sp")
+saveRDS(posterior, "outputs/linear_singlepop/posterior.rds")
 
-# prep per-population posterior summary as one long data frame for the next plot
+poptrends = posterior |>
+  select(c(sp, variable, mean, sd)) |>
+  dplyr::filter(variable %in% c("b_Intercept", "b_time")) |>
+  tidyr::pivot_wider(names_from = variable, values_from = c(mean, sd)) |>
+  rename("Intercept" = "mean_b_Intercept",
+         "x1" = "mean_b_time",
+         "Intercept_SD" = "sd_b_Intercept",
+         "x1_SD" = "sd_b_time",
+         "pop" = "sp") |>
+  relocate(pop, .after = "x1_SD")
+poptrends$pop = as.factor(poptrends$pop)
+saveRDS(poptrends, "outputs/linear_singlepop_population_trends.rds")
 
-posterior_pops  = data.frame(
-  "sp" = names(posterior_ls),
-  "slope" = unlist(lapply(posterior_ls, function(x) mean(x$beta_year))),
-  "intercept" = unlist(lapply(posterior_ls, function(x) mean(x$alpha))),
-  "slope_lo" = unlist(lapply(posterior_ls, function(x) quantile(x$beta_year, prob = .025))),
-  "slope_hi" = unlist(lapply(posterior_ls, function(x) quantile(x$beta_year, prob = .975))),
-  "intercept_lo" = unlist(lapply(posterior_ls, function(x) quantile(x$alpha, prob = .025))),
-  "intercept_hi" = unlist(lapply(posterior_ls, function(x) quantile(x$beta_year, prob = .975)))
-)
 
 ################################################################################
 
 # calculate the average trend across populations ----
+posterior_slopes = dplyr::filter(posterior, variable == "b_time")
+posterior_int = dplyr::filter(posterior, variable == "b_Intercept")
 
-posterior <- bind_rows(posterior_ls, .id = "sp")
-saveRDS(posterior, "outputs/linear_singlepop/posterior.rds")
+# assemble all draws in one matrix
+for(i in 1:npops){
+  # Read in the model 
+  m = readRDS(paste0("outputs/linear_singlepop/model_", i, ".rds"))
+  m_data = m$data
+  
+  if(i > 1){
+  # extract posterior draws in an array format
+  all_draws <- rbind(all_draws, as_draws_matrix(m))
+  } else {all_draws <- as_draws_matrix(m)}
+}
+saveRDS(all_draws, "outputs/linear_singlepop/all_draws.rds")
+all_summary = summarise_draws(all_draws)
 
-slope = posterior$beta_year |> quantile(probs = c(0.025, 0.5, 0.975), na.rm = TRUE)
-intercept = posterior$alpha |> quantile(probs = c(0.025, 0.5, 0.975), na.rm = TRUE)
-sigma = posterior$sigma |> mean(na.rm = TRUE)
-
+# note: this is a 90% credible interval
 avg_trend = data.frame(
   "year" = time+1981,
-  "biomass" = slope[2]*time + intercept[2],
-  "cilo" = slope[1]*time + intercept[1],
-  "cihi" = slope[3]*time + intercept[3]
+  "biomass" = all_summary$mean[2]*time + all_summary$mean[1],
+  "cilo" = all_summary$q5[2]*time + all_summary$q5[1],
+  "cihi" = all_summary$q95[2]*time + all_summary$q95[1]
 )
 saveRDS(avg_trend, "outputs/linear_singlepop/avg_trend.rds")
 
@@ -140,13 +114,14 @@ pop_trends = list()
 for(i in 1:npops){
   pop_trends[[i]] = data.frame(
     "year" = time+1981,
-    "biomass" = posterior_pops$slope[i]*time + posterior_pops$intercept[i],
-    "cilo" = posterior_pops$slope_lo[i]*time + posterior_pops$intercept_lo[i],
-    "cihi" = posterior_pops$slope_hi[i]*time + posterior_pops$intercept_hi[i]
+    "biomass" = posterior_slopes$mean[i]*time + posterior_int$mean[i],
+    "cilo" = posterior_slopes$q5[i]*time + posterior_int$q5[i],
+    "cihi" = posterior_slopes$q95[i]*time + posterior_int$q95[i]
   )
 }
 names(pop_trends) = colnames(biomass)
 pop_trends = bind_rows(pop_trends, .id = "sp")
+saveRDS(pop_trends, "outputs/linear_singlepop_pred_l.rds")
 
 ## plot the average trend  ----
 
@@ -158,9 +133,9 @@ biomass_l = as.data.frame(biomass) |>
 ggplot() +
   geom_line(data = biomass_l, aes(x = year, y = biomass, group = sp), size = .3, alpha = .4) +
   geom_ribbon(data = avg_trend,
-            aes(x = year, ymin = cilo, ymax = cihi), alpha = .3) + # credible interval?
+              aes(x = year, ymin = cilo, ymax = cihi), alpha = .3) + # credible interval?
   geom_line(data = avg_trend,
-              aes(x = year, y = biomass), linewidth = 1, col = "red") +
+            aes(x = year, y = biomass), linewidth = 1, col = "red") +
   # geom_ribbon(data = pop_trends,
   #           aes(x = year, ymin = cilo, ymax = cihi, group = sp), alpha = .05) +
   geom_line(data = pop_trends,
