@@ -26,7 +26,7 @@ time <- time-min(time)
 npops <- ncol(Year_Geom_Means_all)
 tsl <- nrow(Year_Geom_Means_all)
 
-biomass <- Year_Geom_Means_all %>% apply(2, scale, center = FALSE)
+biomass <- Year_Geom_Means_all %>% apply(2, scale, center = TRUE)
 matplot(biomass, type = "l")
 saveRDS(biomass, "outputs/biomass.rds")
 
@@ -91,15 +91,15 @@ pred_l <- pred$mu |> as.data.frame() |>
   mutate("year" = time+1981) |>
   pivot_longer(cols = -year, values_to = "pred_biomass", names_to = "pop")
 
-pred_q025_l <- pred$q025 |> as.data.frame() |>
+pred_q05_l <- pred$q05 |> as.data.frame() |>
   mutate("year" = time+1981) |>
-  pivot_longer(cols = -year, values_to = "pred_biomass_q025", names_to = "pop")
+  pivot_longer(cols = -year, values_to = "pred_biomass_q05", names_to = "pop")
 
-pred_q975_l <- pred$q975 |> as.data.frame() |>
+pred_q95_l <- pred$q95 |> as.data.frame() |>
   mutate("year" = time+1981) |>
-  pivot_longer(cols = -year, values_to = "pred_biomass_q975", names_to = "pop")
+  pivot_longer(cols = -year, values_to = "pred_biomass_q95", names_to = "pop")
 
-pred_l <- left_join(pred_l, pred_q025_l) |> left_join(pred_q975_l)
+pred_l <- left_join(pred_l, pred_q05_l) |> left_join(pred_q95_l)
 # save model
 saveRDS(pred_l, "outputs/linear_hierarchical_pred_l.RDS")
 
@@ -112,8 +112,8 @@ saveRDS(biomass_l, "outputs/biomass_l.rds")
 # plot predicted trend over the real trend for each population
 ggplot() + 
   geom_ribbon(data = pred_l, aes(x = year, 
-                                 ymin = pred_biomass_q025, 
-                                 ymax = pred_biomass_q975, fill = pop), 
+                                 ymin = pred_biomass_q05, 
+                                 ymax = pred_biomass_q95, fill = pop), 
               alpha = .4) +
   geom_line(data = pred_l, aes(x = year, y = pred_biomass)) +
   geom_line(data = biomass_l, aes(x = year, y = biomass, col = pop), lty = 2) +
@@ -176,7 +176,7 @@ ggplot(data = df) +
 # average slope with CI
 paramX_overall_mean = m$results$estimation$paramX |> apply(2, mean) # this is the same as coef$paramX
 paramX_overall_sd = m$results$estimation$paramX |> apply(2, sd)
-paramX_overall_quantile = m$results$estimation$paramX |> apply(2, quantile, prob = c(.025, .5, .975))
+paramX_overall_quantile = m$results$estimation$paramX |> apply(2, quantile, prob = c(.05, .5, .95))
 
 # LPI-Community ----
 coefs$meansParamX # community's variance (temporal trends) 
@@ -197,27 +197,27 @@ abline(v = paramX_overall_quantile[3,2], col = "red", lty = 2)
 
 # plotting the predicted trend across all populations
 overall_pred = predictQ.hmsc(m, type = "response")
-plot(overall_pred$overall_mu, type = "l", ylim = c(-.3, 3), lwd = 2)
-lines(overall_pred$overall_q025)
-lines(overall_pred$overall_q975)
+plot(overall_pred$overall_mu, type = "l", ylim = c(-2, 3), lwd = 2)
+lines(overall_pred$overall_q05)
+lines(overall_pred$overall_q95)
 
 # same plot, but with the population trends behind the trend line
 # in ggplot
 df_overall = data.frame(
   "year" = time+1981,
   "mu" = overall_pred$overall_mu,
-  "q025" = overall_pred$overall_q025,
-  "q975" = overall_pred$overall_q975
+  "q05" = overall_pred$ overall_q05,
+  "q95" = overall_pred$overall_q95
 )
 # save 
 saveRDS(df_overall, "outputs/linear_hierarchical_df_overall.RDS")
 
 ggplot() +
   geom_ribbon(data = pred_l,
-              aes(x = year, group = pop, ymin = pred_biomass_q025, ymax = pred_biomass_q975), alpha = .3, fill = "salmon") +
+              aes(x = year, group = pop, ymin = pred_biomass_q05, ymax = pred_biomass_q95), alpha = .3, fill = "salmon") +
   geom_line(data = pred_l,
             aes(x = year, y = pred_biomass, group = pop), linewidth = .2) +
-  geom_ribbon(data = df_overall, aes(x = year, ymin = q025, ymax = q975), alpha = .6, fill = "dodgerblue4") +
+  geom_ribbon(data = df_overall, aes(x = year, ymin = q05, ymax = q95), alpha = .6, fill = "dodgerblue4") +
   geom_line(data = df_overall, aes(x = year, y = mu), linewidth = 1, col = "white")
 
 ################################################################################
@@ -229,8 +229,8 @@ assoMat <- corRandomEff(m)
 
 # Average
 siteMean <- apply(assoMat[, , , 1], 1:2, mean)
-siteLower <- apply(assoMat[, , , 1], 1:2, quantile, prob = c(0.025))
-siteUpper <- apply(assoMat[, , , 1], 1:2, quantile, prob = c(0.975))
+siteLower <- apply(assoMat[, , , 1], 1:2, quantile, prob = c(0.05))
+siteUpper <- apply(assoMat[, , , 1], 1:2, quantile, prob = c(0.95))
 
 # black out the weakest associations (that overlap with 0)
 #siteMean[which(siteLower <= 0 & siteUpper >= 0)] <- NA
