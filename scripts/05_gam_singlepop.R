@@ -119,16 +119,6 @@ saveRDS(pop_trends, "outputs/gam_singlepop_pred_l.rds")
 
 ## plot the average trend  ----
 
-####### left off here ----
-# note: this is a 90% credible interval
-# avg_trend = data.frame(
-#   "year" = time+1981,
-#   "biomass" = all_summary$mean[2]*time + all_summary$mean[1],
-#   "cilo" = all_summary$q5[2]*time + all_summary$q5[1],
-#   "cihi" = all_summary$q95[2]*time + all_summary$q95[1]
-# )
-# saveRDS(avg_trend, "outputs/gam_singlepop/avg_trend.rds")
-
 avg_trend = pop_trends |>
   group_by(year) |>
   summarise(biomass = mean(biomass),
