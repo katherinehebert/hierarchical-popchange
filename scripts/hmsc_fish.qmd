@@ -69,10 +69,12 @@ tsl <- nrow(Year_Geom_Means_all)
 # format data
 XData <- as.matrix(time)
 YData <- as.matrix(Year_Geom_Means_all) %>% apply(2, scale, center = FALSE)
-randomEff <- as.factor(1:tsl) # assign a location to pairings of pops
+randomEff <- as.factor(1:tsl) 
 
 # prepare data
-formDat <- as.HMSCdata(X = XData, Y = YData, Random = randomEff, 
+formDat <- as.HMSCdata(X = XData, 
+                       Y = YData, 
+                       Random = randomEff, 
                        interceptX = TRUE)
 
 # run model
@@ -91,7 +93,6 @@ saveRDS(m, here("models/hmsc.RDS"))
 ```{r}
 # extract the parameters and format them into an `mcmc` object.
 mcmcMeansParamX <- as.mcmc(m, parameters = "meansParamX")
-
 # check for parameter convergence (visually)
 traceplot(mcmcMeansParamX)
 ```
@@ -138,9 +139,13 @@ lines(pred_quantiles[3,] ~ XData, lwd = 2, lty= 2, col = "red")
 __Legend__:
 
 Black lines = prediction for each population
+
 Blue line = mean prediction
+
 Red line = median prediction
+
 Dashed red lines = 2.5% and 97.5% quantiles (95% credible interval)
+
 
 ## Extract model coefficients: alpha
 
@@ -191,11 +196,20 @@ assoMat <- corRandomEff(m)
 
 # Average
 siteMean <- apply(assoMat[, , , 1], 1:2, mean)
+siteLower <- apply(assoMat[, , , 1], 1:2, quantile, prob = c(0.025))
+siteUpper <- apply(assoMat[, , , 1], 1:2, quantile, prob = c(0.975))
+
+# siteMean[which(siteLower <= 0 & siteUpper >= 0)] <- NA
 
 # Plot as heatmap
 corrplot::corrplot(siteMean, type = "lower",
                    method = "color", 
-                   tl.cex = .4, tl.col = "black")
+                   tl.cex = .4, tl.col = "black", 
+                   lowCI.mat = siteLower, uppCI.mat = siteUpper)
+
+
+source("scripts/biplot.hmsc.R")
+biplot.hmsc(m, Random = 1, type = c("text", "points"), pch = 16)
 ```
 
 ## Extract global population trend
@@ -213,9 +227,10 @@ Note: this is *just* the temporal trend, without the latent variation or the res
 
 ```{r}
 (lpicomm = var(coefs$paramX[,2]))
+lpicomm = coefs$varX
 ```
 
-So after accounting for the covariation between populations, an average population in this ensemble declined in size by 7.8% every year but the temporal trends vary a lot between populations ($\sigma^2$ = 0.11, so SD = 0.34).
+So after accounting for the covariation between populations, an average population in this ensemble declined in size by 7.8% _ish_ every year but the temporal trends vary a lot between populations ($\sigma^2$ = 0.158, so SD = 0.025).
 
 ## Compare to LPI
 
