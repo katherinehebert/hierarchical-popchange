@@ -4,9 +4,11 @@
 # libraries ----
 
 library(here)
+library(tidyr)
 library(dplyr)
 library(bayesGAM)
 library(tidybayes)
+library(posterior)
 library(ggplot2)
 library(ggpubr)
 theme_set(theme_pubr())
@@ -36,7 +38,7 @@ for(i in 1:npops){
     "biomass" = biomass[,i],
     "time" = time
   )
-  m = bayesGAM(biomass ~ time + 1, data = df)
+  m = bayesGAM(biomass ~ time, data = df)
   saveRDS(m, paste0("outputs/gam_singlepop/model_", i, ".rds"))
 }
 
@@ -68,9 +70,8 @@ names(summary_ls) = colnames(biomass)
 summary_df <- bind_rows(summary_ls, .id = "pop")
 saveRDS(summary_df, "outputs/gam_singlepop/summary.rds")
 
-
 poptrends = summary_df |>
-  select(c(pop, variable, mean, sd)) |>
+  dplyr::select(c(pop, variable, mean, sd)) |>
   dplyr::filter(variable %in% c("(Intercept)", "time")) |>
   tidyr::pivot_wider(names_from = variable, values_from = c(mean, sd)) |>
   rename("Intercept" = "mean_(Intercept)",
@@ -95,6 +96,7 @@ for(i in 1:npops){
     all_draws <- rbind(all_draws, draws_fit)
   } else {all_draws <- m |> getStanResults() |> as_draws_matrix()}
 }
+saveRDS(all_draws, "outputs/gam_singlepop_alldraws.rds")
 all_summary = summarise_draws(all_draws)
 
 # predict each population's trend from the model
@@ -104,7 +106,7 @@ for(i in 1:npops){
   # Read in the model 
   m = readRDS(paste0("outputs/gam_singlepop/model_", i, ".rds"))
   
-  pp = posterior_predict(m, draws = 100)
+  pp = bayesGAM::posterior_predict(m, draws = 100)
 
   pop_trends[[i]] = data.frame(
     "year" = time+1981,
