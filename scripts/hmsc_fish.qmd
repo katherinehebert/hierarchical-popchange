@@ -46,6 +46,8 @@ library(patchwork)
 knitr::opts_chunk$set(message = FALSE, fig.align = 'center', fig.width = 8)
 
 theme_set(theme_pubr())
+
+source("scripts/predictQ.hmsc.R")
 ```
 
 ```{r}
@@ -57,6 +59,7 @@ theme_set(theme_pubr())
 load("~/Documents/GitHub/groundfish-data-analysis/data/year_geom_means.Rdata")
 
 time = rownames(Year_Geom_Means_all) %>% as.numeric()
+time_uncentered = time
 
 # get number of populations & length of time series
 npops <- ncol(Year_Geom_Means_all)
@@ -68,7 +71,14 @@ tsl <- nrow(Year_Geom_Means_all)
 ```{r, results='hide'}
 # format data
 XData <- as.matrix(time)
-YData <- as.matrix(Year_Geom_Means_all) %>% apply(2, scale, center = FALSE)
+YData <- as.matrix(Year_Geom_Means_all) %>% 
+  apply(2, scale, center = FALSE)
+# YData = apply(YData, 2, function(x) x - x[1])
+YData_scalesd = apply(as.matrix(Year_Geom_Means_all), 2, sd)
+
+# Save scaled attibutes:
+#scaleList <- list(scale = attr(YData, "scaled"))
+
 randomEff <- as.factor(1:tsl) 
 
 # prepare data
@@ -80,12 +90,12 @@ formDat <- as.HMSCdata(X = XData,
 # run model
 m <- hmsc(formDat,
                 family = "gaussian",
-                niter = 15000,
+                niter = 20000,
                 nburn = 5000,
                 thin = 5,
                 verbose = FALSE)
 # save model
-saveRDS(m, here("models/hmsc.RDS"))
+saveRDS(m, "models/hmsc.RDS")
 ```
 
 ### Model performance
@@ -95,13 +105,16 @@ saveRDS(m, here("models/hmsc.RDS"))
 mcmcMeansParamX <- as.mcmc(m, parameters = "meansParamX")
 # check for parameter convergence (visually)
 traceplot(mcmcMeansParamX)
+
+bayesplot::mcmc_trace(mcmcMeansParamX)
+ggsave("figures/traceplots_meansparamX.png", width = 10, height = 4)
 ```
 
 ```{r}
 # Explanatory power 
 
 # (R2 <- Rsquared(m, averageSp = FALSE))
-(R2comm <- Rsquared(m, averageSp = TRUE))
+(R2comm <- Rsquared(m, averageSp = TRUE, type = "ols"))
 ```
 
 ## Predicting the full model
@@ -113,27 +126,67 @@ traceplot(mcmcMeansParamX)
 formPredDat = as.HMSCdata(X = XData, Random = randomEff)
 
 # predict population size over time from the model
-pred <- predict(m,
+pred_all <- predict(m,
+                newdata = formPredDat,
+                type = "response")
+pred <- predictQ.hmsc(m,
                 newdata = formPredDat,
                 type = "response")
 ```
 
 ```{r}
-# Average N across populations
-pred_mean = apply(pred, 1, mean)
-pred_sd = apply(pred, 1, sd)
-pred_quantiles = apply(pred, 1, quantile, probs = c(0.025, 0.5, 0.975))
+pred_mean = pred$overall_mu
+pred_quantiles = cbind(pred$overall_q025, pred$overall_mu, pred$overall_q975)
+
+# # Average N across populations
+# pred_mean = apply(pred, 1, mean)
+# pred_sd = apply(pred, 1, sd)
+# pred_quantiles = apply(pred, 1, quantile, probs = c(0.025, 0.5, 0.975))
 ```
 
 ```{r, echo=F, warning=FALSE}
-plot(pred_quantiles[2,] ~ XData, 
+par(mfrow=c(1,1))
+plot(pred_quantiles[,2] ~ XData, 
      col = "white", xlab = "years", ylab = "N",
-     ylim = c(min(pred), max(pred)))
-for(i in 1:ncol(pred)) {lines(pred[,i] ~ XData, lwd = .5)}
-lines(pred_quantiles[2,] ~ XData, lwd = 2, col = "red")
+     ylim = c(min(pred$q025), max(pred$q975)))
+for(i in 1:ncol(pred_all)) {lines(pred_all[,i] ~ XData, lwd = .5)}
 lines(pred_mean ~ XData, lwd = 2, col = "blue")
-lines(pred_quantiles[1,] ~ XData, lwd = 2, lty= 2, col = "red")
-lines(pred_quantiles[3,] ~ XData, lwd = 2, lty= 2, col = "red")
+lines(pred_quantiles[,1] ~ XData, lwd = 2, lty= 2, col = "red")
+lines(pred_quantiles[,3] ~ XData, lwd = 2, lty= 2, col = "red")
+```
+
+```{r}
+## convert to ggplot and save
+
+pred_poptrends = pred_all |> as.data.frame() |> 
+  mutate(year = time) |>
+  tidyr::pivot_longer(cols = -year)
+
+# # convert back to unscaled data
+# pred_poptrends_unscaled = pred
+# for(i in 1:ncol(pred)){
+#   pred_poptrends_unscaled[,i] = YData_scalesd[i] * pred_poptrends_unscaled[,i]
+# }
+
+pred_avgtrend = data.frame(
+  year = time,
+  mu = pred_quantiles[,2],
+  q025 = pred_quantiles[,1],
+  q975 = pred_quantiles[,3]
+)
+
+# bayesplot::color_scheme_get()
+
+ggplot() +
+  geom_ribbon(data = pred_avgtrend, 
+              aes(ymin = q025, ymax = q975, x = year),
+              alpha = .3, fill = "#6497b1") +
+    geom_line(data = pred_poptrends,
+            aes(x = year, y = value, group = name), col = "#005b96", lwd = .1) +
+  geom_line(data = pred_avgtrend, aes(x = year, y = mu), lwd = 1, col = "#03396c") +
+  labs(x = "Year", y = "Biomass") +
+  ggpubr::theme_pubr()
+ggsave("figures/hmsc_prediction.png", width = 7, height = 4.3)
 ```
 
 __Legend__:
@@ -152,17 +205,22 @@ Dashed red lines = 2.5% and 97.5% quantiles (95% credible interval)
 ```{r}
 # extract the parameters and format them into an `mcmc` object.
 coefs = coef(m)
+
+poptrend_sd = apply(m$results$estimation$paramX, 1:2, sd) |> as.data.frame()
 ```
 
 ```{r}
 temp = as.data.frame(coefs$paramX)
 temp$pop = rownames(temp)
+temp$pop = gsub("_", " ", temp$pop) |> stringr::str_to_sentence()
 temp$pop <- factor(temp$pop, levels = temp$pop[order(temp$x1)])
+temp <- cbind(temp, poptrend_sd$x1)
+colnames(temp)[4] = "x1_sd"
 
 data_breaks <- data.frame(start = c(-1, -0.1, 0.1),  # Create data with breaks
                           end = c(-0.1, 0.1, 1),
-                          colors = factor(c(1,3,2)))
-
+                          colors = factor(c("Decline", "Stable", "Growth"),
+                                          levels = c("Decline", "Stable", "Growth")))
 (plot_poptrends = 
     ggplot(data = temp) +
     geom_rect(data = data_breaks,
@@ -170,22 +228,55 @@ data_breaks <- data.frame(start = c(-1, -0.1, 0.1),  # Create data with breaks
                 xmax = end,
                 ymin = - Inf,
                 ymax = Inf,
-                fill = colors), alpha = .2) +
-  geom_point(aes(y = pop, x = x1)) +
-  labs(y = "", x = "alpha i") +
-  geom_vline(xintercept = 0, lwd = .3) +
-  coord_cartesian(xlim = c(-1, 1)))
+                fill = colors), alpha = .4) +
+      scale_fill_manual(values = c("#fb9a99", "#a6cee3", "#b2df8a")) +
+    geom_segment(aes(y = pop,yend = pop, x = x1 - x1_sd, xend = x1 + x1_sd)) +
+  geom_point(aes(y = pop, x = x1), size = 3) +
+  labs(y = "", x = "Temporal slope (\u03b1)", fill = "Direction of change") +
+  geom_vline(xintercept = 0, lwd = .3, lty = 2) +
+    geom_vline(xintercept = coefs$meansParamX[2]) +
+  coord_cartesian(xlim = c(-1, 1))) +
+  theme_pubr() +
+  theme(axis.text.y = element_text(face = "italic"))
+ggsave("figures/hmsc_populationslopes.png", width = 8.6, height = 7)
 ```
+
 
 ```{r}
 (plot_trenddensity = ggdensity(temp, x = "x1", add = "mean", rug = TRUE) +
   coord_cartesian(xlim = c(-1, 1)) +
-  labs(title = "Distribution of alpha",
+  labs(title = "Distribution of \u03b1",
        subtitle = paste0("Mean = ", 
                          signif(mean(temp$x1), digits = 3),
                         ", Variance = ", 
                         signif(var(temp$x1), digits = 3)),
-       y = "Density", x = "Alpha"))
+       y = "Density", x = "\u03b1"))
+
+coef_alliterations = rbind(m$results$estimation$paramX)
+
+z1 <- apply(m$results$estimation$paramX, 3L, c)
+z2 <- expand.grid(dimnames(m$results$estimation$paramX)[1:2])
+coef_alliterations = data.frame(z2, z1) |> 
+  dplyr::filter(Var2 == "x1") |>
+  tidyr::pivot_longer(cols = -c(Var1, Var2))
+
+
+(A = (plot_trenddensity = ggdensity(coef_alliterations, x = "value", add = "mean", rug = FALSE, add.params = list(linetype = 1)) +
+  coord_cartesian(xlim = c(-1, 1)) +
+   labs(#title = "Distribution of \u03b1",
+  #      subtitle = paste0("Mean = ", 
+  #                        signif(mean(temp$x1), digits = 3),
+  #                       ", Variance = ", 
+  #                       signif(var(temp$x1), digits = 3)),
+       title = "Density distribution of temporal slope estimates (\u03b1)", x = "\u03b1", y = "")) +
+    geom_vline(xintercept = 0, lwd = .3, lty = 2) +
+  theme(legend.position = "none"))
+
+library(patchwork)
+A / (plot_poptrends + theme(axis.text.y = element_text(face = "italic"))) + 
+  plot_layout(heights = (c(1,3))) +
+  plot_annotation(tag_levels = "a")
+ggsave("figures/distribution_poptrends.png", width = 8.23, height = 7.63)
 ```
 
 ## Extract covariance between populations
@@ -201,15 +292,23 @@ siteUpper <- apply(assoMat[, , , 1], 1:2, quantile, prob = c(0.975))
 
 # siteMean[which(siteLower <= 0 & siteUpper >= 0)] <- NA
 
+colnames(siteMean) <- gsub("_", " ", colnames(siteMean)) |> stringr::str_to_sentence()
+rownames(siteMean) <- gsub("_", " ", rownames(siteMean)) |> stringr::str_to_sentence()
+
+which(siteMean[lower.tri(siteMean, diag = FALSE)] > .9) |> length()
+
 # Plot as heatmap
+png(height=1800, width=1800, file="figures/species_associations.png", type = "cairo")
 corrplot::corrplot(siteMean, type = "lower",
                    method = "color", 
-                   tl.cex = .4, tl.col = "black", 
-                   lowCI.mat = siteLower, uppCI.mat = siteUpper)
+                   tl.cex = 2.5, cl.cex = 3, tl.col = "black", 
+                   lowCI.mat = siteLower, uppCI.mat = siteUpper,
+                   font = 3)
+dev.off()
 
-
-source("scripts/biplot.hmsc.R")
-biplot.hmsc(m, Random = 1, type = c("text", "points"), pch = 16)
+# #source("scripts/biplot.hmsc.R")
+# source("~/Desktop/biplot.hmsc.R", echo=TRUE)
+# biplot.hmsc(m, Random = 1, type = c("points", "text"), pch = 16)
 ```
 
 ## Extract global population trend
@@ -219,15 +318,14 @@ Note: this is *just* the temporal trend, without the latent variation or the res
 ### Average slope of the temporal trend in population size (LPI-pop)
 
 ```{r}
-(lpipop = mean(coefs$paramX[,2]))
+(lpipop = coefs$meansParamX[2])
 (lpipop_ci = quantile(coefs$paramX[,2], probs = c(0.025, 0.975)))
 ```
 
 ### Variance in the temporal trend across populations (LPI-comm)
 
 ```{r}
-(lpicomm = var(coefs$paramX[,2]))
-lpicomm = coefs$varX
+(lpicomm = coefs$varX[2,2])
 ```
 
 So after accounting for the covariation between populations, an average population in this ensemble declined in size by 7.8% _ish_ every year but the temporal trends vary a lot between populations ($\sigma^2$ = 0.158, so SD = 0.025).
@@ -246,20 +344,61 @@ rlpi_results <- rlpi_results[-nrow(rlpi_results),] # remove last value which is 
 ```{r}
 A = ggplot() +
   geom_ribbon(data = rlpi_results, 
-              aes(ymin = CI_low, ymax = CI_high, x = time), alpha = .3) + 
+              aes(ymin = CI_low, ymax = CI_high, x = time), alpha = .3, fill = "#6497b1") + 
   geom_line(data = rlpi_results, aes(x = time, y = LPI_final)) +
-  labs(title = "Living Planet Index", x = "Time", y = "LPI", 
-       caption = "Note: The LPI shows changes in population growth rates.")
+  geom_hline(yintercept = 1, lty = 2, lwd = .5) +
+  labs(title = "Living Planet Index", x = "Year", y = "LPI", 
+       #caption = "Note: The LPI shows changes in population growth rates."
+       ) +
+  coord_cartesian(ylim = c(-0.2, 2))
 
-hmsc_predabundances = t(pred_quantiles) %>% as.data.frame()
+hmsc_predabundances = pred_quantiles %>% as.data.frame()
+cbind(time, hmsc_predabundances/hmsc_predabundances[1,2])
 
-B = ggplot() +
-  geom_ribbon(data = hmsc_predabundances, 
-              aes(ymin = `2.5%`, ymax = `97.5%`, x = time), alpha = .3) + 
-  geom_line(aes(x = time, y = hmsc_predabundances$`50%`)) +
-  labs(title = "Predicted abundance trend from HMSC", x = "Time", y = "Median predicted abundance", caption = "Note: The HMSC model shows changes in population abundances.")
+B = ggplot(
+  # transform the predictions to begin at 1 in 1980
+  #data = hmsc_predabundances) +
+  data = hmsc_predabundances/hmsc_predabundances[1,2]) +
+  geom_ribbon(aes(ymin = V1, ymax = V3, x = time), alpha = .3, fill = "#6497b1") + 
+  geom_line(aes(x = time, y = V2)) +
+  geom_hline(yintercept = 1, lty = 2, lwd = .5) +
+  labs(title = "Hierarchical model", x = "Year", y = "Average biomass"
+       #, caption = "Note: The HMSC model shows changes in population abundances."
+       ) +
+  coord_cartesian(ylim = c(-0.2, 2))
+# 
+# growthrate = function(x) {
+#   results = c(1)
+#   for(i in 2:length(x)){
+#     results[i] = x[i]/x[i-1]
+#   }
+#   return(results)
+# }
+# 
+# 
+# 
+# 
+# a = growthrate(hmsc_predabundances$`2.5%`)
+# b = growthrate(pred_mean)
+# c = growthrate(hmsc_predabundances$`97.5%`)
+# 
+# plot(b ~ time, type = "l")
+# 
+# index = 1
+# for(i in 2:length(time)){
+#   index[i] = index[i-1]*b[i]
+# }
+# 
+# index_lower = 1
+# for(i in 2:length(time)){
+#   index_lower[i] = index_lower[i-1]*a[i]
+# }
+# 
+# plot(index ~ time, type = "l")
+# lines(index_lower ~ time)
 
 A + B + plot_annotation(tag_levels = "a")
+ggsave("figures/compare_lpi_hmsc.png", width = 11.7, height = 5.16)
 ```
 
 These two trends show different things: the LPI shows the overall trend in population _growth rates_, while the HMSC prediction shows the overall trend in population _abundance_.
@@ -316,3 +455,42 @@ To summarise, the hierarchical approach allows us to estimate:
 - The abundance trend for each population, allowing us to see which were declining, stable, or growing, with a credible interval for each
 - The variance in this overall trend, which tells us about how population change is unfolding at the community level (LPI-comm)
 - Correlations between populations' abundance trends (via latent variables)
+
+
+```{r}
+# plot the species' trophic levels and habitats to try to explain their associations
+Heike_Traits <- read_csv("~/Documents/GitHub/groundfish-data-analysis/data/Heike_Traits.csv")
+temp$DFO_clean_2014_name = rownames(temp)
+temp_traits = left_join(temp, Heike_Traits)
+
+
+verticalposition_siteMean = siteMean[order(temp_traits$vertical.position, decreasing = TRUE),order(temp_traits$vertical.position, decreasing = TRUE)]
+
+corrplot::corrplot(verticalposition_siteMean, type = "lower",
+                   method = "color", 
+                   #tl.cex = 2.5, cl.cex = 3, 
+                   tl.col = "black", 
+                   lowCI.mat = siteLower, uppCI.mat = siteUpper,
+                   font = 3)
+
+trophic_siteMean = siteMean[order(temp_traits$trophic.level, decreasing = TRUE),order(temp_traits$trophic.level, decreasing = TRUE)]
+
+corrplot::corrplot(trophic_siteMean, type = "lower",
+                   method = "color", 
+                   #tl.cex = 2.5, cl.cex = 3, 
+                   tl.col = "black", 
+                   lowCI.mat = siteLower, uppCI.mat = siteUpper,
+                   font = 3)
+
+boxplot(temp_traits$x1 ~ temp_traits$trophic.group)
+boxplot(temp_traits$x1 ~ temp_traits$vertical.position)
+
+plot(log(temp_traits$WeightData) ~ temp_traits$x1)
+tiny_lm = lm(log(temp_traits$WeightData) ~ temp_traits$x1)
+summary(tiny_lm)
+
+plot(log(temp_traits$length) ~ temp_traits$x1)
+tiny_lm = lm(log(temp_traits$length) ~ temp_traits$x1)
+summary(tiny_lm)
+```
+

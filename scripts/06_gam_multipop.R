@@ -22,11 +22,15 @@ rm(Year_Geom_Means, Year_Geom_Means_rare, Year_Geom_Means_SE)
 time <- rownames(Year_Geom_Means_all) %>% as.numeric()
 time <- time-min(time)
 time_m <- as.matrix(time)
+year_effect <- as.character(time)
 
 npops <- ncol(Year_Geom_Means_all)
 tsl <- nrow(Year_Geom_Means_all)
 
-biomass <- Year_Geom_Means_all %>% apply(2, scale, center = TRUE) |> as.data.frame()
+biomass <- Year_Geom_Means_all %>% 
+  #apply(2, function(x) (x+1)) |>
+  apply(2, scale, center = TRUE) |>
+  as.data.frame()
 matplot(biomass, type = "l")
 
 # format into long
@@ -41,7 +45,7 @@ data_train = dat
 # gam on all populations ----
 
 # prepare the priors ----
-knots = 20
+knots = ceiling(tsl/4)
 mvgam_prior <- mvgam(data = data_train,
                      formula = y ~ s(time, bs = "tp", k = knots),
                      family = "gaussian",
@@ -58,6 +62,7 @@ test_priors <- get_mvgam_priors(y ~ s(time, bs = "tp", k = knots),
                                 data = data_train,
                                 trend_model = 'RW',
                                 use_stan = TRUE)
+# these are too flat? or is it good to have flat ones?
 
 # look at the priors
 plot(mvgam_prior, type = 'smooths', realisations = TRUE)
@@ -72,9 +77,10 @@ mod1 <- mvgam(data = data_train,
               family = "gaussian",
               trend_model = 'RW',
               use_stan = TRUE,
-              chains = 3,
-              burnin = 100,
-              samples = 1000
+              chains = 2,
+              burnin = 500,
+              samples = 2500,
+              priors = test_priors
 )
 saveRDS(mod1, paste0("outputs/gam_multipop.rds")) # 8% ended in divergence. needs longer probably
 # to view the Stan model file:
@@ -148,11 +154,14 @@ saveRDS(predictions, "outputs/gam_multipop_pred_l.rds")
 source("~/Documents/GitHub/hierarchical-lpi/scripts/plot_mvgam_trend_custom.R")
 trend_vals = list()
 preds_ls = list()
+derivs_ls = list()
 for(i in 1:npops){
   trend_vals[[i]] = plot_mvgam_trend_custom(mod1, derivatives = TRUE, series = i)
   preds_ls[[i]] = trend_vals[[i]]$preds
+  derivs_ls[[i]] = trend_vals[[i]]$derivs
 }
 preds = do.call(rbind, preds_ls)
+derivs = do.call(rbind, derivs_ls)
 
 avg_trend = data.frame(
   "year" = time+1981,
@@ -163,9 +172,25 @@ avg_trend = data.frame(
 )
 saveRDS(avg_trend, "outputs/gam_multipop_df_overall.rds")
 
+avg_deriv_trend = data.frame(
+  "year" = time+1981,
+  "avg_trend" = apply(derivs, 2, mean, na.rm = T),
+  "cilo" = apply(derivs, 2, quantile, prob = .05, na.rm = T),
+  "cihi" = apply(derivs, 2, quantile, prob = .95, na.rm = T),
+  "sd" = apply(derivs, 2, sd)
+)
+saveRDS(avg_deriv_trend, "outputs/gam_multipop_df_overall_deriv.rds")
+
+
 plot(avg_trend ~ time, data = avg_trend, type = "l", lty = 1, ylim = c(-2, 6))
 lines(cilo ~ time, data = avg_trend, lty = 2)
 lines(cihi ~ time, data = avg_trend, lty = 2)
+
+plot(avg_trend ~ year, data = avg_deriv_trend, type = "l", lty = 1, ylim = c(-1.5, 1.5), col = NULL)
+abline(h = 0, col = "grey")
+lines(avg_trend ~ year, data = avg_deriv_trend)
+lines(cilo ~ year, data = avg_deriv_trend, lty = 2)
+lines(cihi ~ year, data = avg_deriv_trend, lty = 2)
 
 # get species correlations
 sp_correlations = lv_correlations(mod1)

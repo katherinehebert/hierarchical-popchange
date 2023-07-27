@@ -1,5 +1,5 @@
-# Script to make a multivariate hierarchical generalized additive model 
-# (i.e. with a year effect)
+# Script to make a multivariate generalized additive model 
+# with a latent temporal trend
 
 # libraries ----
 
@@ -38,15 +38,16 @@ data_train = dat
 
 ################################################################################
 
-# hierarchical gam on all populations ----
+# gam on all populations ----
 
 # prepare the priors ----
 knots = ceiling(tsl/4)
 mvgam_prior <- mvgam(data = data_train,
-                     formula = y ~ s(time, bs = "tp", k = knots) + 
-                       s(series, bs = 're', k = npops),
+                     formula = y ~ s(time, bs = "tp", k = knots),
                      family = "gaussian",
-                     trend_model = 'RW',
+                     trend_model = 'AR1',
+                     use_lv = TRUE, 
+                     n_lv = 2,
                      chains = 3,
                      use_stan = TRUE,
                      prior_simulation = TRUE)
@@ -54,33 +55,33 @@ mvgam_prior <- mvgam(data = data_train,
 mvgam_prior$model_file
 
 # record the priors
-test_priors <- get_mvgam_priors(y ~ s(time, bs = "tp", k = knots) + 
-                                  s(series, bs = 're', k = npops),
+test_priors <- get_mvgam_priors(y ~ s(time, bs = "tp", k = knots),
                                 family = "gaussian",
                                 data = data_train,
-                                trend_model = 'RW',
+                                trend_model = 'AR1',
+                                use_lv = TRUE, 
+                                n_lv = 2,
                                 use_stan = TRUE)
+test_priors
 
 # look at the priors
 plot(mvgam_prior, type = 'smooths', realisations = TRUE)
 plot(mvgam_prior, type = 'trend')
-plot(mvgam_prior, type = 're')
 
 
 # train the model on data ----
 mod1 <- mvgam(data = data_train,
-              formula = y ~ s(time, bs = "tp", k = knots) + 
-                s(series, bs = 're', k = npops),
-              #use_lv = TRUE,
-              #n_lv = 2,
+              formula = y ~ s(time, bs = "tp", k = knots),
+              use_lv = TRUE,
+              n_lv = 2,
               family = "gaussian",
-              trend_model = 'RW',
+              trend_model = 'AR1',
               use_stan = TRUE,
               chains = 3,
               burnin = 100,
               samples = 1000
 )
-saveRDS(mod1, paste0("outputs/gam_hierarchical.rds")) # 4% ended in divergence
+saveRDS(mod1, paste0("outputs/gam_multipop_latent.rds"))
 # to view the Stan model file:
 code(mod1)
 m <- mod1
@@ -92,7 +93,7 @@ rstan::stan_trace(mod1$model_output, 'b')
 # extract posterior draws in an array format
 draws_fit = m$model_output |> posterior::as_draws_matrix()
 posterior_df = posterior::summarize_draws(draws_fit)
-saveRDS(posterior_df, "outputs/gam_hierarchical_posterior.rds")
+saveRDS(posterior_df, "outputs/gam_multipop_latent_posterior.rds")
 
 coefs = coef(m, summarise = FALSE)
 coef_df = data.frame(
@@ -100,8 +101,8 @@ coef_df = data.frame(
   "mean" = apply(coefs, 2, mean),
   "q5" = apply(coefs, 2, quantile, prob = .05),
   "q95" = apply(coefs, 2, quantile, prob = .95)
-  )
-saveRDS(coef_df, "outputs/gam_hierarchical_coefs.rds")
+)
+saveRDS(coef_df, "outputs/gam_multipop_latent_coefs.rds")
 
 # assign the population name to the numbers in the parameter names
 # extract the model summary
@@ -114,7 +115,7 @@ pops = data.frame(
 )
 # get coefficients for each series (species)
 coef_df$sd = apply(coefs, 2, sd)
-coef_pop_df = coef_df[grep("series", coef_df$variable),] |>
+coef_pop_df = coef_df[grep("time", coef_df$variable),] |>
   tidyr::separate(variable, sep = "\\.", into = c("variable", "number")) |>
   mutate(number = as.integer(number)) |>
   left_join(pops)
@@ -130,7 +131,7 @@ coef_pop_df = coef_pop_df |>
   subset(select = c(Intercept, mean, Intercept_SD, sd, pop)) |>
   rename("x1" = "mean",
          "x1_SD" = "sd")
-saveRDS(coef_pop_df, "outputs/gam_hierarchical_population_trends.rds") 
+saveRDS(coef_pop_df, "outputs/gam_multipop_latent_population_trends.rds") 
 
 # predict from the model
 predictions = posterior_df[c(grep("ypred", posterior_df$variable)),] |>
@@ -144,7 +145,7 @@ predictions = posterior_df[c(grep("ypred", posterior_df$variable)),] |>
          "cilo" = "q5",
          "cihi" = "q95") |>
   mutate(time = as.integer(time)+1980)
-saveRDS(predictions, "outputs/gam_hierarchical_pred_l.rds")
+saveRDS(predictions, "outputs/gam_multipop_latent_pred_l.rds")
 
 
 ## average trend??
@@ -161,7 +162,6 @@ for(i in 1:npops){
 preds = do.call(rbind, preds_ls)
 derivs = do.call(rbind, derivs_ls)
 
-
 avg_trend = data.frame(
   "year" = time+1981,
   "avg_trend" = apply(preds, 2, mean),
@@ -169,7 +169,7 @@ avg_trend = data.frame(
   "cihi" = apply(preds, 2, quantile, prob = .95),
   "sd" = apply(preds, 2, sd)
 )
-saveRDS(avg_trend, "outputs/gam_hierarchical_df_overall.rds")
+saveRDS(avg_trend, "outputs/gam_multipop_latent_df_overall.rds")
 
 avg_deriv_trend = data.frame(
   "year" = time+1981,
@@ -178,21 +178,21 @@ avg_deriv_trend = data.frame(
   "cihi" = apply(derivs, 2, quantile, prob = .95, na.rm = T),
   "sd" = apply(derivs, 2, sd)
 )
-saveRDS(avg_deriv_trend, "outputs/gam_hierarchical_df_overall_deriv.rds")
+saveRDS(avg_deriv_trend, "outputs/gam_multipop_latent_df_overall_deriv.rds")
 
 plot(avg_trend ~ time, data = avg_trend, type = "l", lty = 1, ylim = c(-2, 6))
 lines(cilo ~ time, data = avg_trend, lty = 2)
 lines(cihi ~ time, data = avg_trend, lty = 2)
 
-plot(avg_trend ~ year, data = avg_deriv_trend, type = "l", lty = 1, ylim = c(-1.5, 1.5), col = NULL)
+plot(avg_trend ~ time, data = avg_deriv_trend, type = "l", lty = 1, ylim = c(-1, 1), col = NULL)
 abline(h = 0, col = "grey")
-lines(avg_trend ~ year, data = avg_deriv_trend)
-lines(cilo ~ year, data = avg_deriv_trend, lty = 2)
-lines(cihi ~ year, data = avg_deriv_trend, lty = 2)
+lines(avg_trend ~ time, data = avg_deriv_trend)
+lines(cilo ~ time, data = avg_deriv_trend, lty = 2)
+lines(cihi ~ time, data = avg_deriv_trend, lty = 2)
 
 # get species correlations
 sp_correlations = lv_correlations(mod1)
-saveRDS(sp_correlations, "outputs/gam_hierarchical_species_correlations.rds")
+saveRDS(sp_correlations, "outputs/gam_multipop_latent_species_correlations.rds")
 
 # Plot as heatmap
 corrplot::corrplot(sp_correlations$mean_correlations, 

@@ -80,15 +80,10 @@ dat$series <- as.factor(dat$series)
 dat$time <- as.integer(dat$time)
 
 data_train = dat
-#data_train = filter(dat, time < 2003)
-#data_test = filter(dat, time >= 2003)
 
 ggplot(data_train) +
   geom_line(aes(x = time, y = y, group = series, col = series), lwd = .5) +
   theme(legend.position = "none")
-# ggplot(data_test) +
-#   geom_line(aes(x = time, y = y, group = series, col = series), lwd = .5) +
-#   theme(legend.position = "none")
 ```
 
 ## Building the model 
@@ -99,27 +94,26 @@ ggplot(data_train) +
 knots = 20
 mvgam_prior <- mvgam(data = data_train,
                formula = y ~ s(time, bs = "tp", k = knots) + 
-                s(time, by = series, bs = "tp", m = 1) +
-                s(series, bs = 're'),
+               s(series, bs = 're', k = npops),
                family = "gaussian",
-               trend_model = 'AR1',
+               trend_model = 'RW',
                chains = 3,
                use_stan = TRUE,
                prior_simulation = TRUE)
-
+mvgam_prior$model_file
 plot(mvgam_prior, type = 'smooths', realisations = TRUE)
-plot(mvgam_prior, type = 'smooths')
+plot(mvgam_prior, type = 'trend')
+plot(mvgam_prior, type = 're')
 ```
 
 Checking the default prior distributions for this model formulation:
 
 ```{r, eval = TRUE, cache = FALSE}
 test_priors <- get_mvgam_priors(y ~ s(time, bs = "tp", k = knots) + 
-                s(time, by = series, bs = "tp", m = 1) +
-                s(series, bs = 're'),
+                s(series, bs = 're', k = npops),
                                 family = "gaussian",
                                 data = data_train,
-                                trend_model = 'AR1',
+                                trend_model = 'RW',
                                 use_stan = TRUE)
 test_priors %>% kableExtra::kable() %>% kableExtra::kable_styling(latex_options = "striped")
 ```
@@ -132,19 +126,16 @@ Using the default priors:
 
 ```{r, results='hide', cache = FALSE}
 mod1 <- mvgam(data = data_train,
-              # model GI from Pedersen 2019
-              # A single common smoother plus group-level smoothers with differing wiggliness (Model GI)
                 formula = y ~ s(time, bs = "tp", k = knots) + 
-                s(time, by = series, bs = "tp", m = 1) +
-                s(series, bs = 're'),
+                s(series, bs = 're', k = npops),
                 use_lv = TRUE,
-                n_lv = 1,
+                n_lv = 5,
                 family = "gaussian",
-                trend_model = 'AR1',
+                trend_model = 'RW',
                 use_stan = TRUE,
                 chains = 3,
                 burnin = 100,
-                samples = 500
+                samples = 1000
                 )
 # to view the Stan model file:
 # code(mod1)
@@ -160,13 +151,6 @@ plot(mod1)
 rstan::stan_trace(mod1$model_output, 'rho')
 ```
 
-For the latent trend:
-
-```{r}
-rstan::stan_trace(mod1$model_output, 'ar1')
-```
-
-
 ### Posterior checks
 
 Is the model able to simulate data for the training period that looks realistic and unbiased?
@@ -175,7 +159,7 @@ First, looking at histograms for the posterior retrodictions to compare to the h
 
 ```{r}
 pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_ppc_hist.pdf", onefile = TRUE)
-for(i in 1:30){
+for(i in 1:npops){
   ppc(mod1, series = i, type = 'hist')
 }
 ```
@@ -184,7 +168,7 @@ Then, comparing the simulated empirical Cumulative Distribution Functions (CDF) 
 
 ```{r}
 pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_ppc_cdf.pdf", onefile = TRUE)
-for(i in 1:30){
+for(i in 1:npops){
   ppc(mod1, series = i, type = 'cdf')
 }
 ```
@@ -193,7 +177,7 @@ Then looking for biases in predictions, by examining a Probability Integral Tran
 
 ```{r}
 pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_ppc_pit.pdf", onefile = TRUE)
-for(i in 1:30){
+for(i in 1:npops){
   ppc(mod1, series = i, type = 'pit')
 }
 ```
@@ -201,7 +185,7 @@ for(i in 1:30){
 ### Plot the trends
 
 ```{r}
-for(i in 1:30){
+for(i in 1:npops){
 plot_mvgam_trend(mod1, series = i, derivatives = TRUE)
 }
 ```
@@ -238,26 +222,3 @@ corrplot::corrplot(sp_correlations$mean_correlations,
                    tl.cex = .4, tl.col = "black")
 ```
 
-```{r, include=FALSE, eval = TRUE}
-# pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_mod1_uncertainty.pdf", onefile = TRUE)
-# for(i in 1:30){
-#   plot_mvgam_uncertainty(mod1, series = i, newdata = data_test, legend_position = "none")
-# }
-# dev.off()
-# 
-# pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_mod1_trends.pdf", onefile = TRUE)
-# for(i in 1:30){
-#   plot_mvgam_trend(mod1, series = i, newdata = data_test, legend_position = "none")
-# }
-# dev.off()
-```
-
-### A quick look at the data
-
-```{r}
-pdf("~/Documents/GitHub/hierarchical-lpi/figures/mvgam_plot_timeseries.pdf", onefile = TRUE)
-for(i in 1:30){
-  plot(mod1, type = "series", data_train = data_train, series = i)
-}
-dev.off()
-```

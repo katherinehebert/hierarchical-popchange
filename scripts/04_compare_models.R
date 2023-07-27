@@ -17,15 +17,15 @@ biomass_l <- readRDS("outputs/biomass_l.rds")
 
 ## loading the models
 
-linear_single <- lapply(list.files("outputs/linear_singlepop/")[-c(1,32)], function(x) readRDS(paste0("outputs/linear_singlepop/", x)))
+linear_single <- lapply(list.files("outputs/linear_singlepop/")[-c(1,2,33)], function(x) readRDS(paste0("outputs/linear_singlepop/", x)))
 linear_multi <- readRDS("outputs/linear_multipop.RDS")
 linear_hier <- readRDS("outputs/linear_hierarchical.RDS")
 
 ## get the variance explained by the models
 
 # each pop biomass ~ time
-R2_single = lapply(linear_single, loo_R2) %>% lapply(as.data.frame) %>% bind_rows()
-R2_single$pop = gsub(".rds", "", list.files("outputs/linear_singlepop/")[-c(1,32)])
+R2_single = lapply(linear_single, brms::loo_R2) %>% lapply(as.data.frame) %>% bind_rows()
+R2_single$pop = gsub(".rds", "", list.files("outputs/linear_singlepop/")[-c(1,2,33)])
 # biomass ~ time
 R2_multi = Rsquared(linear_multi)
 # + a latent variable for year
