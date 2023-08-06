@@ -11,7 +11,8 @@ library(tidybayes)
 library(ggplot2)
 library(ggpubr)
 library(patchwork)
-theme_set(theme_pubr())
+theme_set(theme_pubr() +
+            theme(panel.grid.major.x = element_line()))
 
 set.seed(12)
 
@@ -104,17 +105,21 @@ saveRDS(mod1, paste0("outputs/gam_hierarchical.rds")) # 4% ended in divergence
 # to view the Stan model file:
 m <- mod1
 # save the model file
-write_stan_file(m$model_file, "stan")
+cmdstanr::write_stan_file(m$model_file, "stan")
 summary(mod1)
 
 # convergence?
+png("figures/traceplots_timebases.png", height=1800, width=1800, type = "cairo")
 rstan::stan_trace(mod1$model_output, 'b')
+dev.off()
 
 ## plot the temporal trend (time smooth) ----
 
 plot_mvgam_smooth(mod1, smooth = "time")
 mvgam::plot_mvgam_randomeffects(mod1)
+png("figures/mvgam_latentfactorplot.png", height=1000, width=1800, type = "cairo",pointsize = 20)
 plot_mvgam_factors(mod1)
+dev.off()
 
 # extract posterior draws in an array format
 draws_fit = m$model_output |> posterior::as_draws_matrix()
@@ -154,13 +159,15 @@ predictions = posterior_df[c(grep("ypred", posterior_df$variable)),] |>
          "biomass" = "mean",
          "cilo" = "q5",
          "cihi" = "q95") |>
-  mutate(time = as.integer(time)+1980)
+  mutate(time = as.integer(time)+1981)
 saveRDS(predictions, "outputs/gam_hierarchical_pred_l.rds")
 
 # plot the predictions next to the data ----
 data_train = rename(data_train, "sp" = "series")
-data_train$sp = gsub("_", "\n", data_train$sp) |> stringr::str_to_sentence()
-predictions$sp = gsub("_", "\n", predictions$sp) |> stringr::str_to_sentence()
+data_train$sp = gsub("_", " ", data_train$sp) |> stringr::str_to_sentence()
+data_train$sp = gsub(" ", "\n", data_train$sp)
+predictions$sp = gsub("_", " ", predictions$sp) |> stringr::str_to_sentence()
+predictions$sp = gsub(" ", "\n", predictions$sp)
 ggplot(data = predictions,
        aes(x = time, group = sp)) +
   geom_ribbon(aes(ymin = cilo, ymax = cihi, fill = sp), alpha = .2) +
@@ -169,7 +176,7 @@ ggplot(data = predictions,
             aes(x = time+1981, y = y), lty = 2) +
   facet_wrap(~sp, scales = "free_y") +
   theme(legend.position = "none",strip.text = element_text(face = "italic")) +
-  labs(x = "", y = "Biomass (observed)")
+  labs(x = "", y = "Biomass (kg per tow)")
 ggsave("figures/mvgam_predictions_perspecies.png", width = 12.8, height = 7.63)
 
 
@@ -240,7 +247,7 @@ temporal_trend$species =  factor(temporal_trend$species,
     geom_vline(xintercept = mean(derivs_pops, na.rm = TRUE) + sd(derivs_pops, na.rm = TRUE), lty = 2) +
   theme(panel.grid.major.x = element_line()) +
   scale_y_sqrt() +
-  labs(x = "Annual rates of change\n of all species", 
+  labs(x = "Annual rate of change\n (kg per tow/year)", 
        y = "Frequency", 
        fill = "") +
   scale_fill_distiller(palette = "RdBu", 
@@ -252,7 +259,7 @@ temporal_trend$species =  factor(temporal_trend$species,
   geom_segment(aes(x = lower, xend = upper,
                    y = species, yend = species)) +
   geom_point(aes(x = mu_deriv, y = species, fill = mu_deriv), size = 4, pch = 21) +
-  labs(x = "Average rate of change (1981-2013)", 
+  labs(x = "Average rate of change (kg per tow / year)", 
        y = "",
        fill = "") +
   scale_fill_distiller(palette = "RdBu", direction = 1, limits = c(-1,1)) +
@@ -262,21 +269,6 @@ temporal_trend$species =  factor(temporal_trend$species,
         panel.grid.major.x = element_line()) 
 )
 
-# arrange the plot panels and save
-(plot_trenddensity + 
-    coord_cartesian(xlim = c(-2.5, 2.5)) +
-    theme(axis.title.y = element_text(vjust = -60)) #+
-    # annotate("text", x = coefs$meansParamX[2]-0.4, y = 1.8, 
-    #          label = paste0("\u03bc = ", round(coefs$meansParamX[2], digits = 3),
-    #                         "\n \u03c3\u00b2 = ", round(coefs$varX[2,2], digits = 3)))
-  ) / (plot_poptrends + 
-         coord_cartesian(xlim = c(-2.5, 2.5)) +
-     theme(axis.text.y = element_text(face = "italic"),
-           panel.grid.major.x = element_line()) + 
-     scale_fill_distiller(palette = "RdBu", direction = 1, limits = c(-1,1))) +
-  plot_layout(heights = (c(1,3))) +
-  plot_annotation(tag_levels = "a")
-ggsave("figures/distribution_poptrends.png", width = 8.23, height = 9)
 
 
 colnames(derivs_pops) = colnames(Year_Geom_Means_all)
@@ -346,7 +338,7 @@ for(n in unique(derivs_pops_df$name)){
                     x = year, group = name, fill = name), alpha = .3) +
     geom_line(aes(y = value, x = year, group = name), lwd = .2) +
     labs(x = "", 
-         y = "Annual rate of change in biomass") +
+         y = "Average rate of change in biomass (kg per tow / year)") +
     theme(legend.position = "none") +
     gghighlight::gghighlight(name %in% c("Gadus morhua", 
                                          "Hippoglossoides platessoides",
@@ -354,14 +346,15 @@ for(n in unique(derivs_pops_df$name)){
                                          "Sebastes mentella"),
                              use_direct_label = FALSE,
                              unhighlighted_params = list(colour = NULL))
-)
+ + coord_cartesian(ylim = c(-3, 1)))
+
 # plot cumulative derivative trend ----
 (plot_cumu_deriv = ggplot(data = derivs_pops_df) +
     geom_ribbon(aes(ymin = cumulative_deriv - cumulative_deriv_sd,
                     ymax = cumulative_deriv + cumulative_deriv_sd,
                     x = year, group = name, fill = name), alpha = .3) +
   geom_line(aes(y = cumulative_deriv, x = year, group = name), lwd = .2) +
-    labs(x = "", y = "Cumulative change in biomass", fill = "Species") +
+    labs(x = "", y = "Cumulative change in biomass (kg per tow)", fill = "Species") +
     theme(legend.position = "right",
           legend.text = element_text(face = "italic")) +
   gghighlight::gghighlight(name %in% c("Gadus morhua", 
@@ -370,6 +363,7 @@ for(n in unique(derivs_pops_df$name)){
                                        "Sebastes mentella"),
                            use_direct_label = FALSE,
                            unhighlighted_params = list(colour = NULL))
+ + coord_cartesian(ylim = c(-30, 10))
 )
 # Anarhichas denticulatus is the species that has declined a lot too, but isn't 
 # one of the big commercially fished ones. it is considered threatened by COSEWIC since 2001
@@ -405,6 +399,15 @@ avg_deriv_trend[1,2:5] = 0
 # )
 saveRDS(avg_deriv_trend, "outputs/gam_hierarchical_df_overall_deriv.rds")
 
+# average cumulative change trend?
+avg_cumu_deriv_trend = derivs_pops_df |>
+  group_by(year) |>
+  summarise(avg_trend = mean(cumulative_deriv),
+            cilo = quantile(cumulative_deriv, probs = .05),
+            cihi = quantile(cumulative_deriv, probs = .95),
+            sd = sd(cumulative_deriv)) # or is this the sum of all sds?
+saveRDS(avg_cumu_deriv_trend, "outputs/gam_hierarchical_df_overall_cumuderiv.rds")
+
 # plot average biomass trend
 (A = ggplot(data = avg_trend, aes(x = year)) +
     # geom_line(data = predictions, aes(x = time, y = biomass, group = sp),
@@ -412,24 +415,84 @@ saveRDS(avg_deriv_trend, "outputs/gam_hierarchical_df_overall_deriv.rds")
     geom_hline(yintercept = 0, lwd = .3) +
     geom_ribbon(aes(ymin = cilo, ymax = cihi), 
                 alpha = .3, fill = "#6497b1") +
-    geom_line(aes(y = avg_trend), col = "#03396c", lwd = 1) +
+    geom_line(aes(y = avg_trend), col = "#03396c", lwd = .8) +
     labs(x = "",
-         y = "Biomass") +
+         y = "Average biomass (kg per tow)") +
     coord_cartesian(ylim = c(-12,12)) +
     theme(panel.grid.major.x = element_line()))
 # plot avg derivative trend
 (B = ggplot(data = avg_deriv_trend, aes(x = year)) +
     geom_ribbon(aes(ymin = cilo, ymax = cihi), 
                 alpha = .3, fill = "#6497b1") +
-    geom_line(aes(y = avg_trend), col = "#03396c", lwd = 1) +
+    geom_line(aes(y = avg_trend), col = "#03396c", lwd = .8) +
     geom_hline(yintercept = 0, lwd = .3) +
     labs(x = "",
-         y = "Rate of change") +
+         y = "Average rate of change (kg per tow / year)") +
     coord_cartesian(ylim = c(-1.3, 1.3)) +
     theme(panel.grid.major.x = element_line()))
 A + B + plot_annotation(tag_levels = "a")
 ggsave("figures/mvgam_prediction.png", width = 8.46, height = 4.06)
 
+
+
+# FIGURES ######################################################################
+
+
+# fig 1. data and model predictions of biomass ----
+
+(fig1a = ggplot(data = data_train) +
+   geom_hline(yintercept = 0, lwd = .3, col = "grey") +
+  geom_line(aes(x = time+1981,
+            y = y,
+            group = sp), lwd = .4, col = "#03396c") +
+   theme(legend.position = "none") +
+  labs(x = "Year", y = "Biomass (kg per tow)", col = "Species") +
+   coord_cartesian(ylim = c(-30,10)))
+
+(fig1b = ggplot(data = predictions,
+                aes(x = time, group = sp)) +
+    geom_hline(yintercept = 0, lwd = .3, col = "grey") +
+    geom_ribbon(aes(ymin = cilo, ymax = cihi, group = sp), alpha = .2, fill = "#6497b1") +
+    geom_line(aes(y = biomass), lwd = .4, col = "#03396c") +
+    theme(legend.position = "none") +
+    coord_cartesian(ylim = c(-30,10)) +
+    labs(x = "Year", y = "Predicted biomass (kg per tow)", fill = "Species"))
+
+(fig1c <- ggplot(data = avg_trend, aes(x = year)) +
+    geom_hline(yintercept = 0, lwd = .3, col = "grey") +
+    geom_ribbon(aes(ymin = cilo, ymax = cihi), 
+              alpha = .3, fill = "#6497b1") +
+  geom_line(aes(y = avg_trend), col = "#03396c", lwd = .4) +
+  labs(x = "Year",
+       y = "Average biomass (kg per tow)") +
+  coord_cartesian(ylim = c(-30,10)) +
+  theme(panel.grid.major.x = element_line()))
+
+fig1a + fig1b + fig1c + plot_annotation(tag_levels = "a")
+ggsave("figures/fig1.png", width = 11, height = 4.21)
+
+
+# fig 2 - distribution of species' rates of change ----
+
+# These plots are coded above
+# arrange the plot panels and save
+(plot_trenddensity + 
+    coord_cartesian(xlim = c(-2.5, 2.5)) +
+    theme(axis.title.y = element_text(vjust = -60)) #+
+  # annotate("text", x = coefs$meansParamX[2]-0.4, y = 1.8, 
+  #          label = paste0("\u03bc = ", round(coefs$meansParamX[2], digits = 3),
+  #                         "\n \u03c3\u00b2 = ", round(coefs$varX[2,2], digits = 3)))
+) / (plot_poptrends + 
+       coord_cartesian(xlim = c(-2.5, 2.5)) +
+       theme(axis.text.y = element_text(face = "italic"),
+             panel.grid.major.x = element_line()) + 
+       scale_fill_distiller(palette = "RdBu", direction = 1, limits = c(-1,1))) +
+  plot_layout(heights = (c(1,3))) +
+  plot_annotation(tag_levels = "a")
+ggsave("figures/distribution_poptrends.png", width = 8.23, height = 9)
+
+
+# fig 3 - species correlations ----
 
 # get species correlations
 sp_correlations = lv_correlations(mod1)
@@ -437,11 +500,72 @@ saveRDS(sp_correlations, "outputs/gam_hierarchical_species_correlations.rds")
 
 # sp_correlations = readRDS("outputs/gam_hierarchical_species_correlations.rds")
 
+# edit the species names to be prettier
+colnames(sp_correlations$mean_correlations) = gsub("_", " ", colnames(sp_correlations$mean_correlations)) |> 
+  stringr::str_to_sentence()
+rownames(sp_correlations$mean_correlations) = gsub("_", " ", rownames(sp_correlations$mean_correlations)) |> 
+  stringr::str_to_sentence()
+
 # Plot as heatmap
-png(height=1800, width=1800, file="figures/species_associations.png", type = "cairo")
+png(height=1800, width=1800, file="figures/fig3_species_associations.png", type = "cairo")
 corrplot::corrplot(sp_correlations$mean_correlations, 
                    type = "lower",
                    method = "color", 
                    tl.cex = 2.5, cl.cex = 3, tl.col = "black", font = 3)
 dev.off()
 
+
+# fig 4 - summary of population change with indices ----
+
+## Plot cumulative change trend versus the LPI for comparison 
+
+rlpi_results <- readRDS("outputs/rlpi_results.rds")
+rlpi_results$time <- as.integer(rownames(rlpi_results))
+rlpi_results <- rlpi_results[-nrow(rlpi_results),] # remove last value
+
+# import the population trends
+rlpi_poptrends <- read.csv("default_infile_pops_lambda.csv", row.names = 1) |>
+  subset(select = -c(Freq)) |>
+  rename("species" = "SpeciesSSet")
+rlpi_poptrends$X1981 = 0
+# create long version for plotting
+rlpi_poptrends <- pivot_longer(rlpi_poptrends, cols = c(-species)) |>
+  rename("time" = "name")
+rlpi_poptrends$time = readr::parse_number(rlpi_poptrends$time)
+
+rlpi_avgtrend <- read.csv("default_infile_pops_dtemp.csv", row.names = 1) |>
+  pivot_longer(cols = everything()) |>
+  rename("time" = "name")
+rlpi_avgtrend$time = readr::parse_number(rlpi_avgtrend$time)
+rlpi_avgtrend = full_join(data.frame(time = 1980, value = 0), rlpi_avgtrend)
+
+(A = ggplot() +
+    geom_ribbon(data = rlpi_results, 
+                aes(ymin = CI_low, ymax = CI_high, x = time), alpha = .3, fill = "#6497b1") + 
+    geom_line(data = rlpi_results, aes(x = time, y = LPI_final), col = "#03396c") +
+    geom_hline(yintercept = 1, lwd = .3) +
+    labs(y = "Living Planet Index", x = "") +
+    coord_cartesian(ylim = c(0, 2))+
+    theme(panel.grid.major.x = element_line()))
+(B = ggplot(data = avg_cumu_deriv_trend, aes(x = year)) +
+    geom_ribbon(aes(ymin = cilo, ymax = cihi), 
+                alpha = .3, fill = "#6497b1") +
+    geom_line(aes(y = avg_trend), col = "#03396c") +
+    geom_hline(yintercept = 0, lwd = .3) +
+    labs(x = "",
+         y = "Cumulative change in biomass\n(kg per tow)") +
+    coord_cartesian(ylim = c(-10, 10)) +
+    theme(panel.grid.major.x = element_line()))
+
+(C = ggplot(data = avg_deriv_trend, aes(x = year)) +
+    geom_ribbon(aes(ymin = cilo, ymax = cihi), 
+                alpha = .3, fill = "#6497b1") +
+    geom_line(aes(y = avg_trend), col = "#03396c") +
+    geom_hline(yintercept = 0, lwd = .3) +
+    labs(x = "",
+         y = "Average rate of change\n(kg per tow / year)") +
+    coord_cartesian(ylim = c(-1.3, 1.3)) +
+    theme(panel.grid.major.x = element_line()))
+
+C / B / A + plot_annotation(tag_levels = "a")
+ggsave("figures/compare_lpi_mvgam.png", width = 6.3, height = 8)
