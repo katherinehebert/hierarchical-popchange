@@ -63,3 +63,12 @@ outputs/gam_singlepop/model_*
 outputs/
 models/
 default*
+outputs/gam_hierarchical.rds
+outputs/gam_hierarchical_coefs.rds
+outputs/gam_hierarchical_df_overall.rds
+outputs/gam_hierarchical_population_trends.rds
+outputs/gam_hierarchical_posterior.rds
+outputs/gam_hierarchical_pred_l.rds
+outputs/gam_hierarchical_species_correlations.rds
+outputs/gam_multipop.rds
+outputs/rlpi_results.rds
