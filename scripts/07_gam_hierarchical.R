@@ -28,16 +28,16 @@ time_m <- as.matrix(time)
 npops <- ncol(Year_Geom_Means_all)
 tsl <- nrow(Year_Geom_Means_all)
 
-YData <- Year_Geom_Means_all # |> apply(2, scale, center = FALSE)
-# instead of centering on the mean, center on the baseline biomass
+YData <- Year_Geom_Means_all 
+# center on the baseline biomass and standardise by the mean
 for(i in 1:ncol(YData)){
-  YData[,i] = YData[,i] - YData[1,i]
+  YData[,i] = (YData[,i] - YData[1,i])/(mean(YData[,i], na.rm = TRUE))
 }
 
-biomass <- YData |>
-  #apply(2, scale, center = FALSE) |> # try without scaling? the non-centered modelled looks crazy. 
-  as.data.frame()
+biomass <- YData |> as.data.frame()
 matplot(biomass, type = "l")
+
+YMeans = apply(Year_Geom_Means_all, 2, mean, na.rm = TRUE)
 
 # format into long
 biomass$time = time
@@ -73,9 +73,9 @@ mvgam_prior$model_file
 # record the priors
 test_priors <- get_mvgam_priors(y ~ 
                                   # global smoother for all pops over time
-                                  #s(time, bs = "tp", k = knots) + 
-                                  # independent smoothers for each group
-                                  s(time, by = series, bs = "tp", k = knots) +
+                                  s(time, bs = "tp", k = knots) + 
+                                  # # independent smoothers for each group
+                                  # s(time, by = series, bs = "tp", k = knots) +
                                   # random intercept per group
                                   s(series, bs = 're', k = npops),
                                 family = "gaussian",
@@ -91,16 +91,20 @@ plot(mvgam_prior, type = 're')
 # nvm. the number of knots seems to be important to choose here, bc too high = the model has too many things to estimate?
 # train the model on data ----
 mod1 <- mvgam(data = data_train,
-              formula = y ~ s(time, bs = "tp", k = knots) + s(series, bs = "re"),
+              #formula = y ~ s(time, bs = "tp", k = knots) + s(series, bs = "re"),
+              formula =  y ~ s(time, bs = "tp", k = knots) + 
+                # s(time, series, bs = "fs", k = knots, m = 2) + 
+                s(series, bs = "re"),
               use_lv = TRUE,
               family = "gaussian",
               trend_model = 'GP',
               use_stan = TRUE,
               chains = 3, 
               burnin = 5000,
-              samples = 15000
+              samples = 10000
 )
-saveRDS(mod1, paste0("outputs/gam_hierarchical.rds")) # 4% ended in divergence
+saveRDS(mod1, paste0("outputs/gam_hierarchical.rds")) 
+mod1 = readRDS(paste0("outputs/gam_hierarchical.rds"))
 
 # to view the Stan model file:
 m <- mod1
@@ -108,21 +112,35 @@ m <- mod1
 cmdstanr::write_stan_file(m$model_file, "stan")
 summary(mod1)
 
-# convergence?
+# convergence
 png("figures/traceplots_timebases.png", height=1800, width=1800, type = "cairo")
 rstan::stan_trace(mod1$model_output, 'b')
 dev.off()
 
-## plot the temporal trend (time smooth) ----
+## lfo cross-validation just added to mvgam ----
+#lfo_cv.mvgam()
 
-plot_mvgam_smooth(mod1, smooth = "time")
+## plot the temporal trend (time smooth) without population random effect----
+
+png("figures/timesmooth.png", height=1000, width=1000, type = "cairo")
+plot_mvgam_smooth(mod1, smooth = "time") # this is essentially the LPI curve
+dev.off()
+
+par(mfrow = c(3,3))
+for(i in 1:npops){
+  plot_mvgam_smooth(mod1, smooth = "time", series = i)
+}
+
 mvgam::plot_mvgam_randomeffects(mod1)
+
 png("figures/mvgam_latentfactorplot.png", height=1000, width=1800, type = "cairo",pointsize = 20)
 plot_mvgam_factors(mod1)
 dev.off()
 
+# plot(mod1)
+
 # extract posterior draws in an array format
-draws_fit = m$model_output |> posterior::as_draws_matrix()
+draws_fit = m$model_output |> posterior::as_draws_matrix() # mvgam_draws() now exists too
 posterior_df = posterior::summarize_draws(draws_fit)
 saveRDS(posterior_df, "outputs/gam_hierarchical_posterior.rds")
 
@@ -163,6 +181,7 @@ predictions = posterior_df[c(grep("ypred", posterior_df$variable)),] |>
 saveRDS(predictions, "outputs/gam_hierarchical_pred_l.rds")
 
 # plot the predictions next to the data ----
+
 data_train = rename(data_train, "sp" = "series")
 data_train$sp = gsub("_", " ", data_train$sp) |> stringr::str_to_sentence()
 data_train$sp = gsub(" ", "\n", data_train$sp)
@@ -180,8 +199,29 @@ ggplot(data = predictions,
 ggsave("figures/mvgam_predictions_perspecies.png", width = 12.8, height = 7.63)
 
 
-# mean trend from the model
-# posterior_mus = posterior_df[grep("mus", posterior_df$variable),] |> 
+# rescale the predictions to the response scale ----
+predictions_respscale = predictions |> group_by(sp) |> group_split()
+for(i in 1:length(predictions_respscale)){
+  predictions_respscale[[i]]$biomass = predictions_respscale[[i]]$biomass*YMeans[i]
+  predictions_respscale[[i]]$cilo = predictions_respscale[[i]]$cilo*YMeans[i]
+  predictions_respscale[[i]]$cihi = predictions_respscale[[i]]$cihi*YMeans[i]
+}
+predictions_respscale = bind_rows(predictions_respscale)
+
+# plot the rescaled predictions
+(plot_respscale_predictions = 
+  ggplot(data = predictions_respscale) +
+  geom_ribbon(aes(x = time,
+                  ymin = cilo,
+                  ymax = cihi,
+                  group = sp), alpha = .3, fill = "#6497b1") +
+  geom_line(aes(x = time,
+                y = biomass,
+                group = sp)))
+
+
+# # mean trend from the model (without obs error)
+# posterior_mus = posterior_df[grep("mus", posterior_df$variable),] |>
 #   separate(col = variable, into = c("year", "sp"), sep = ",") |>
 #   mutate(year = readr::parse_number(year),
 #          sp = readr::parse_number(sp))
@@ -190,222 +230,293 @@ ggsave("figures/mvgam_predictions_perspecies.png", width = 12.8, height = 7.63)
 source("~/Documents/GitHub/hierarchical-lpi/scripts/plot_mvgam_trend_custom.R")
 trend_vals = list()
 preds_ls = list()
+preds_respscale_ls = list()
 derivs_ls = list()
+derivs_respscale_ls = list()
 for(i in 1:npops){
   trend_vals[[i]] = plot_mvgam_trend_custom(mod1, derivatives = TRUE, series = i)
   preds_ls[[i]] = trend_vals[[i]]$preds
+  preds_respscale_ls[[i]] = trend_vals[[i]]$preds*YMeans[i]
   derivs_ls[[i]] = trend_vals[[i]]$derivs
+  derivs_respscale_ls[[i]] = trend_vals[[i]]$derivs*YMeans[i]
 }
 preds = do.call(rbind, preds_ls)
+preds_respscale = do.call(rbind, preds_respscale_ls)
 derivs = do.call(rbind, derivs_ls)
+derivs_respscale = do.call(rbind, derivs_respscale_ls)
 
-# each species' mean predicted trend in biomass
-preds_pops = do.call(cbind, lapply(preds_ls, FUN = function(x) apply(x, 2, mean, na.rm = TRUE))) 
+# each species' median predicted trend in biomass
+preds_pops = do.call(cbind, lapply(preds_ls, FUN = function(x) apply(x, 2, median, na.rm = TRUE))) 
 matplot(preds_pops, x = time+1981, type = "l")
-# each species' mean derivative 
-derivs_pops = do.call(cbind, lapply(derivs_ls, FUN = function(x) apply(x, 2, mean, na.rm = TRUE)))
-derivs_pops_sd = do.call(cbind, lapply(derivs_ls, FUN = function(x) apply(x, 2, sd, na.rm = TRUE)))
+
+preds_respscale_pops = do.call(cbind, lapply(preds_respscale_ls, FUN = function(x) apply(x, 2, median, na.rm = TRUE))) 
+matplot(preds_respscale_pops, x = time+1981, type = "l")
+
+derivs_respscale_pops = do.call(cbind, lapply(derivs_respscale_ls, FUN = function(x) apply(x, 2, median, na.rm = TRUE))) 
+matplot(derivs_respscale_pops, x = time+1981, type = "l")
+
+# each species' median derivative 
+derivs_pops = do.call(cbind, lapply(derivs_ls, FUN = function(x) apply(x, 2, median, na.rm = TRUE)))
+derivs_pops_lower = do.call(cbind, lapply(derivs_ls, FUN = function(x) apply(x, 2, quantile, probs = .05, na.rm = TRUE)))
+derivs_pops_upper = do.call(cbind, lapply(derivs_ls, FUN = function(x) apply(x, 2, quantile, probs = .95, na.rm = TRUE)))
+
 matplot(derivs_pops, x = time+1981, type = "l")
 
-# # plot the temporal basis coefficients ----
-# # note: (b2 through b9, when 9 knots are used) but need to update if more/less knots are used
-# temporary = draws_fit[,grep("b\\[", colnames(draws_fit))]
-# b_time = temporary[,2:9]
-# plot(density(b_time))
-# abline(v = mean(b_time, na.rm = TRUE))
-# b_time_long = b_time |> 
-#   as.data.frame() |> 
-#   pivot_longer(cols = everything())
-# 
-# (plot_trenddensity = ggdensity(b_time_long, x = "value",
-#                                add = "mean", rug = FALSE, add.params = list(linetype = 1)) +
-#     labs(x = "Posterior estimates of basis coefficients (time)", y = "Density") +
-#     geom_vline(xintercept = 0, lwd = .3, lty = 2) +
-#     theme(legend.position = "none", panel.grid.major.x = element_line()))
-
 # plot each species' mean derivative over the whole time series ----
+
 (temporal_trend = data.frame(
   species = colnames(Year_Geom_Means_all),
   mu_deriv = derivs_pops |> apply(2, mean, na.rm = TRUE),
-  sd_deriv = derivs_pops |> apply(2, sd, na.rm = TRUE)
-  #lower = derivs_pops |> apply(2, quantile, probs = .025, na.rm = TRUE),
-  #upper = derivs_pops |> apply(2, quantile, probs = .975, na.rm = TRUE)
+  #sd_deriv = derivs_pops |> apply(2, sd, na.rm = TRUE)
+  lower = derivs_pops |> apply(2, quantile, probs = .05, na.rm = TRUE),
+  upper = derivs_pops |> apply(2, quantile, probs = .95, na.rm = TRUE)
 ))
-temporal_trend$lower = temporal_trend$mu_deriv - temporal_trend$sd_deriv
-temporal_trend$upper = temporal_trend$mu_deriv + temporal_trend$sd_deriv
+# temporal_trend$lower = temporal_trend$mu_deriv - temporal_trend$sd_deriv
+# temporal_trend$upper = temporal_trend$mu_deriv + temporal_trend$sd_deriv
 temporal_trend$species = gsub("_", " ", temporal_trend$species) |> stringr::str_to_sentence()
 temporal_trend$species =  factor(temporal_trend$species,
                                  levels = temporal_trend$species[order(temporal_trend$mu_deriv)])
-
-# plot a histogram of the average derivatives across all species ----
-(plot_trenddensity = 
-  ggplot(derivs_pops_df) +
-  geom_histogram(aes(x = value, fill = after_stat(x)), 
-                 col = "black", linewidth = .2, bins = 19) + 
-    geom_vline(xintercept = mean(derivs_pops, na.rm = TRUE)) +
-    geom_vline(xintercept = mean(derivs_pops, na.rm = TRUE) - sd(derivs_pops, na.rm = TRUE), lty = 2) +
-    geom_vline(xintercept = mean(derivs_pops, na.rm = TRUE) + sd(derivs_pops, na.rm = TRUE), lty = 2) +
-  theme(panel.grid.major.x = element_line()) +
-  scale_y_sqrt() +
-  labs(x = "Annual rate of change\n (kg per tow/year)", 
-       y = "Frequency", 
-       fill = "") +
-  scale_fill_distiller(palette = "RdBu", 
-                       direction = 1, 
-                       limits = c(-2.5,2.5)))
-
-# plot the average derivative with sd limits per species ----
-(plot_poptrends = ggplot(data = temporal_trend[order(temporal_trend$mu_deriv),]) +
-  geom_segment(aes(x = lower, xend = upper,
-                   y = species, yend = species)) +
-  geom_point(aes(x = mu_deriv, y = species, fill = mu_deriv), size = 4, pch = 21) +
-  labs(x = "Average rate of change (kg per tow / year)", 
-       y = "",
-       fill = "") +
-  scale_fill_distiller(palette = "RdBu", direction = 1, limits = c(-1,1)) +
-  coord_cartesian(xlim = c(-2, 2)) +
-  theme_pubr() +
-  theme(axis.text.y = element_text(face = "italic"),
-        panel.grid.major.x = element_line()) 
-)
-
-
-
 colnames(derivs_pops) = colnames(Year_Geom_Means_all)
-colnames(derivs_pops_sd) = colnames(Year_Geom_Means_all)
+colnames(derivs_pops_lower) = colnames(Year_Geom_Means_all)
+colnames(derivs_pops_upper) = colnames(Year_Geom_Means_all)
+
 derivs_pops_df = derivs_pops |> 
   as.data.frame() |> 
   mutate(year = time + 1981) |>
   pivot_longer(cols = -year)
-temp_sd = derivs_pops_sd |> 
+derivs_pops_df_lower = derivs_pops_lower |> 
   as.data.frame() |> 
   mutate(year = time + 1981) |>
-  pivot_longer(cols = -year, values_to = "sd")
-derivs_pops_df = full_join(derivs_pops_df, temp_sd)
+  pivot_longer(cols = -year, values_to = "lower")
+derivs_pops_df_upper = derivs_pops_upper |> 
+  as.data.frame() |> 
+  mutate(year = time + 1981) |>
+  pivot_longer(cols = -year, values_to = "upper")
+# temp_sd = derivs_pops_sd |> 
+#   as.data.frame() |> 
+#   mutate(year = time + 1981) |>
+#   pivot_longer(cols = -year, values_to = "sd")
+derivs_pops_df = full_join(derivs_pops_df, derivs_pops_df_lower) |>
+  full_join(derivs_pops_df_upper)
 # set first time step's derivative to 0
 derivs_pops_df$value[which(derivs_pops_df$year == 1981)] <- 0
-derivs_pops_df$sd[which(derivs_pops_df$year == 1981)] <- 0
+derivs_pops_df$lower[which(derivs_pops_df$year == 1981)] <- 0
+derivs_pops_df$upper[which(derivs_pops_df$year == 1981)] <- 0
+
+#derivs_pops_df$sd[which(derivs_pops_df$year == 1981)] <- 0
 
 derivs_pops_df$name = gsub("_", " ", derivs_pops_df$name) |> 
   stringr::str_to_sentence()
 derivs_pops_df$name =  factor(derivs_pops_df$name,
                                  levels = temporal_trend$species[order(temporal_trend$mu_deriv)])
 
-# ridgeplot of derivatives per species
-# (plot_deriv_densities = ggplot(data = derivs_pops_df) +
-#   geom_density_ridges_gradient(aes(x = value, y = name, fill = after_stat(x)),
-#                                size = .2, scale = 5) +
-#   scale_fill_distiller(palette = "RdBu", direction = 1, limits = c(-3,3)) +
-#   theme(panel.grid.major.x = element_line(),
-#       ) + 
-#   labs(x = "Annual rate of change (1981-2013)",
-#        y = "",
-#        fill = ""))
+# ridgeplot of derivatives per species ----
+(plot_deriv_densities = ggplot(data = derivs_pops_df) +
+  ggridges::geom_density_ridges_gradient(aes(x = value, y = name, fill = after_stat(x)),
+                               size = .2, scale = 3) +
+  scale_fill_distiller(palette = "RdYlGn", direction = 1, limits = c(-.5,.5)) +
+    geom_vline(xintercept = 0, lwd = .3, lty = 2) +
+  theme(panel.grid.major.x = element_line(),
+      ) +
+  labs(x = "Annual rate of change (1981-2013)",
+       y = "",
+       fill = "")) +
+  coord_cartesian(xlim = c(-.5,.5))
+ggsave("figures/distribution_poptrends_ridgeplot.png", width = 8.23, height = 7)
+
+# ridgeplot of derivatives per year ----
+derivs_pops_df$year_factor = factor(derivs_pops_df$year,
+                                    levels = rev(as.character(time+1981)))
+(plot_deriv_densities_annual = ggplot(data = derivs_pops_df) +
+    ggridges::geom_density_ridges_gradient(aes(x = value, y = year_factor, 
+                                               fill = after_stat(x)),
+                                           quantile_lines = TRUE,
+                                           quantile_fun = function(x,...) median(x),
+                                           size = .4, scale = 2.5) +
+    # scale_fill_gradient2(low = "#d73027", mid = "white", high = "#1a9850", limits = c(-.5,.5)) +
+    scale_fill_distiller(palette = "RdYlGn", direction = 1, limits = c(-.5,.5)) +
+    geom_vline(xintercept = 0, lwd = .5, lty = 2) +
+    theme(panel.grid.major.x = element_line(), legend.position = "none") +
+    labs(x = "Annual rate of change (1981-2013)",
+         y = "",
+         fill = "")) +
+  coord_cartesian(xlim = c(-.5,.5))
+ggsave("figures/distribution_yearlytrends_ridgeplot.png", width = 4.03, height = 7.58)
+
 
 derivs_pops_df$cumulative_deriv = NA
-derivs_pops_df$cumulative_deriv_sd = NA
+#derivs_pops_df$cumulative_deriv_sd = NA
 for(n in unique(derivs_pops_df$name)){
   temp = derivs_pops_df$value[which(derivs_pops_df$name == n)]
-  temp2 = derivs_pops_df$sd[which(derivs_pops_df$name == n)]
+  #temp2 = derivs_pops_df$sd[which(derivs_pops_df$name == n)]
   
   cumulative_sum_derivatives = c(0)
-  cumulative_sum_derivatives_sd = c(0)
+  #cumulative_sum_derivatives_sd = c(0)
   for(i in 2:length(temp)){
     cumulative_sum_derivatives[i] = sum(temp[1:i], na.rm = TRUE)
-    cumulative_sum_derivatives_sd[i] = sum(temp2[1:i], na.rm = TRUE)
+    #cumulative_sum_derivatives_sd[i] = sum(temp2[1:i], na.rm = TRUE)
   }
   
   derivs_pops_df$cumulative_deriv[which(derivs_pops_df$name == n)] <- cumulative_sum_derivatives
-  derivs_pops_df$cumulative_deriv_sd[which(derivs_pops_df$name == n)] <- cumulative_sum_derivatives_sd
+  #derivs_pops_df$cumulative_deriv_sd[which(derivs_pops_df$name == n)] <- cumulative_sum_derivatives_sd
 }
 
-# plot estimated derivative trend ----
-# ggplot(data = derivs_pops_df) +
-#   geom_line(aes(y = value, x = year, group = name), lwd = .2) +
-#   coord_cartesian(ylim = c(-3,1)) +
-#   labs(x = "",
-#        y = "Estimated rate of change in biomass") +
-#   theme(legend.position = "right") +
-#   gghighlight::gghighlight(name %in% c("Gadus morhua", 
-#                                        "Hippoglossoides platessoides",
-#                                        "Reinhardtius hippoglossoides",
-#                                        "Sebastes mentella"),
-#                            use_direct_label = FALSE
-#   )
-(plot_deriv = ggplot(data = derivs_pops_df) +
-    geom_ribbon(aes(ymin = value - sd,
-                    ymax = value + sd,
-                    x = year, group = name, fill = name), alpha = .3) +
-    geom_line(aes(y = value, x = year, group = name), lwd = .2) +
-    labs(x = "", 
-         y = "Average rate of change in biomass (kg per tow / year)") +
-    theme(legend.position = "none") +
-    gghighlight::gghighlight(name %in% c("Gadus morhua", 
-                                         "Hippoglossoides platessoides",
-                                         "Reinhardtius hippoglossoides",
-                                         "Sebastes mentella"),
-                             use_direct_label = FALSE,
-                             unhighlighted_params = list(colour = NULL))
- + coord_cartesian(ylim = c(-3, 1)))
 
-# plot cumulative derivative trend ----
-(plot_cumu_deriv = ggplot(data = derivs_pops_df) +
-    geom_ribbon(aes(ymin = cumulative_deriv - cumulative_deriv_sd,
-                    ymax = cumulative_deriv + cumulative_deriv_sd,
-                    x = year, group = name, fill = name), alpha = .3) +
-  geom_line(aes(y = cumulative_deriv, x = year, group = name), lwd = .2) +
-    labs(x = "", y = "Cumulative change in biomass (kg per tow)", fill = "Species") +
-    theme(legend.position = "right",
-          legend.text = element_text(face = "italic")) +
-  gghighlight::gghighlight(name %in% c("Gadus morhua", 
+# plot a histogram of the average derivatives across all species ----
+(plot_trenddensity = 
+   ggplot(derivs_pops_df) +
+   geom_histogram(aes(x = value, fill = after_stat(x)), 
+                  col = "black", linewidth = .2, bins = 19) + 
+   geom_vline(xintercept = mean(derivs_pops, na.rm = TRUE)) +
+   geom_vline(xintercept = mean(derivs_pops, na.rm = TRUE) - sd(derivs_pops, na.rm = TRUE), lty = 2) +
+   geom_vline(xintercept = mean(derivs_pops, na.rm = TRUE) + sd(derivs_pops, na.rm = TRUE), lty = 2) +
+   theme(panel.grid.major.x = element_line()) +
+   scale_y_sqrt() +
+   labs(x = "Annual rate of change", 
+        y = "Frequency", 
+        fill = "") +
+   scale_fill_distiller(palette = "RdYlGn", 
+                        direction = 1, 
+                        limits = c(-.5,.5)) +
+   coord_cartesian(xlim = c(-.5, .5))) 
+
+# plot the average derivative with 90% quantiles per species ----
+
+(plot_poptrends = ggplot(data = temporal_trend[order(temporal_trend$mu_deriv),]) +
+   geom_segment(aes(x = lower, xend = upper,
+                    y = species, yend = species), lwd = .3) +
+   geom_point(aes(x = mu_deriv, y = species, fill = mu_deriv), 
+              size = 4, pch = 21) +
+   geom_vline(xintercept = 0, lwd = .3, lty = 2) +
+   labs(x = "Average rate of change", 
+        y = "",
+        fill = "") +
+   scale_fill_distiller(palette = "RdYlGn", direction = 1, limits = c(-.1,.1)) +
+   coord_cartesian(xlim = c(-.5, .5)) +
+   theme_pubr() +
+   theme(axis.text.y = element_text(face = "italic"),
+         panel.grid.major.x = element_line()) 
+)
+
+# plot the average derivative with 90% quantiles per year ----
+
+(plot_poptrends = ggplot(data = temporal_trend[order(temporal_trend$mu_deriv),]) +
+   geom_segment(aes(x = lower, xend = upper,
+                    y = species, yend = species), lwd = .3) +
+   geom_point(aes(x = mu_deriv, y = species, fill = mu_deriv), 
+              size = 4, pch = 21) +
+   geom_vline(xintercept = 0, lwd = .3, lty = 2) +
+   labs(x = "Average rate of change", 
+        y = "",
+        fill = "") +
+   scale_fill_distiller(palette = "RdYlGn", direction = 1, limits = c(-.1,.1)) +
+   coord_cartesian(xlim = c(-.5, .5)) +
+   theme_pubr() +
+   theme(axis.text.y = element_text(face = "italic"),
+         panel.grid.major.x = element_line()) 
+)
+
+# plot estimated derivative trend ----
+ggplot(data = derivs_respscale) +
+  geom_line(aes(y = value, x = year, group = name), lwd = .2) +
+  coord_cartesian(ylim = c(-3,1)) +
+  labs(x = "",
+       y = "Estimated rate of change in biomass") +
+  theme(legend.position = "right") +
+  gghighlight::gghighlight(name %in% c("Gadus morhua",
                                        "Hippoglossoides platessoides",
                                        "Reinhardtius hippoglossoides",
                                        "Sebastes mentella"),
-                           use_direct_label = FALSE,
-                           unhighlighted_params = list(colour = NULL))
- + coord_cartesian(ylim = c(-30, 10))
-)
-# Anarhichas denticulatus is the species that has declined a lot too, but isn't 
-# one of the big commercially fished ones. it is considered threatened by COSEWIC since 2001
+                           use_direct_label = FALSE
+  )
+
+(plot_deriv = ggplot(data = derivs_pops_df) +
+   geom_hline(yintercept = 0, col = "grey") +
+    geom_ribbon(aes(ymin = lower, ymax = upper,
+                    x = year, group = name, group = name), alpha = .1, fill = "#6497b1") +
+    geom_line(aes(y = value, x = year, group = name), lwd = .2) +
+    labs(x = "", 
+         y = "Average rate of change in biomass") +
+    theme(legend.position = "none") +
+    # gghighlight::gghighlight(name %in% c("Gadus morhua", 
+    #                                      "Hippoglossoides platessoides",
+    #                                      "Reinhardtius hippoglossoides",
+    #                                      "Sebastes mentella"),
+    #                          use_direct_label = FALSE,
+    #                          unhighlighted_params = list(colour = NULL)) +
+    coord_cartesian(ylim = c(-.6, .6)))
+
+# # plot cumulative derivative trend ----
+# (plot_cumu_deriv = ggplot(data = derivs_pops_df) +
+#    geom_hline(yintercept = 0, col = "grey") +
+#     # geom_ribbon(aes(ymin = cumulative_deriv - cumulative_deriv_sd,
+#     #                 ymax = cumulative_deriv + cumulative_deriv_sd,
+#     #                 x = year, group = name), alpha = .1, fill = "#6497b1") +
+#   geom_line(aes(y = cumulative_deriv, x = year, group = name), lwd = .2) +
+#     labs(x = "", y = "Cumulative change in biomass", fill = "Species") +
+#     theme(legend.position = "right",
+#           legend.text = element_text(face = "italic")) +
+#   # gghighlight::gghighlight(name %in% c("Gadus morhua", 
+#   #                                      "Hippoglossoides platessoides",
+#   #                                      "Reinhardtius hippoglossoides",
+#   #                                      "Sebastes mentella"),
+#   #                          use_direct_label = FALSE,
+#   #                          unhighlighted_params = list(colour = NULL)) +
+#   coord_cartesian(ylim = c(-6, 6)))
+
 #|> plotly::ggplotly() 
 
-plot_deriv + plot_cumu_deriv
-ggsave("figures/mvgam_rateofchange.png", width = 11, height = 4.06)
+# plot_deriv + plot_cumu_deriv + plot_annotation(tag_levels = "a")
+# ggsave("figures/mvgam_rateofchange.png", width = 11, height = 4.06)
 
-# should this be avg by species, then avg over community? ----
+# avg biomass trend ----
+
 avg_trend = data.frame(
   "year" = time+1981,
   "avg_trend" = apply(preds, 2, mean),
   "cilo" = apply(preds, 2, quantile, prob = .05),
-  "cihi" = apply(preds, 2, quantile, prob = .95),
-  "sd" = apply(preds, 2, sd)
+  "cihi" = apply(preds, 2, quantile, prob = .95)
 )
 saveRDS(avg_trend, "outputs/gam_hierarchical_df_overall.rds")
+
+# avg biomass trend on response scale ----
+
+avg_trend_respscale = data.frame(
+  "year" = time+1981,
+  "avg_trend" = apply(preds_respscale, 2, mean),
+  "cilo" = apply(preds_respscale, 2, quantile, prob = .05),
+  "cihi" = apply(preds_respscale, 2, quantile, prob = .95)
+)
+saveRDS(avg_trend_respscale, "outputs/gam_hierarchical_df_overall_respscale.rds")
+
+
+# avg derivative ----
 
 avg_deriv_trend = data.frame(
   "year" = time+1981,
   "avg_trend" = apply(derivs, 2, mean, na.rm = T),
   "cilo" = apply(derivs, 2, quantile, prob = .05, na.rm = T),
-  "cihi" = apply(derivs, 2, quantile, prob = .95, na.rm = T),
-  "sd" = apply(derivs, 2, sd)
-)
-avg_deriv_trend[1,2:5] = 0
-# avg_deriv_trend = data.frame(
-#   "year" = time+1981,
-#   "avg_trend" = apply(derivs_pops, 1, mean, na.rm = TRUE),
-#   "cilo" = apply(derivs_pops, 1, quantile, prob = .025, na.rm = TRUE),
-#   "cihi" = apply(derivs_pops, 1, quantile, prob = .975, na.rm = TRUE),
-#   "sd" = apply(derivs_pops, 1, sd)
-# )
+  "cihi" = apply(derivs, 2, quantile, prob = .95, na.rm = T)
+  )
+avg_deriv_trend[1,2:4] = 0
 saveRDS(avg_deriv_trend, "outputs/gam_hierarchical_df_overall_deriv.rds")
 
-# average cumulative change trend?
+avg_deriv_respscale_trend = data.frame(
+  "year" = time+1981,
+  "avg_trend" = apply(derivs_respscale, 2, mean, na.rm = T),
+  "cilo" = apply(derivs_respscale, 2, quantile, prob = .05, na.rm = T),
+  "cihi" = apply(derivs_respscale, 2, quantile, prob = .95, na.rm = T)
+)
+avg_deriv_respscale_trend[1,2:4] = 0
+#saveRDS(avg_deriv_trend, "outputs/gam_hierarchical_df_overall_deriv.rds")
+
+
+# average cumulative change trend ----
 avg_cumu_deriv_trend = derivs_pops_df |>
   group_by(year) |>
   summarise(avg_trend = mean(cumulative_deriv),
             cilo = quantile(cumulative_deriv, probs = .05),
-            cihi = quantile(cumulative_deriv, probs = .95),
-            sd = sd(cumulative_deriv)) # or is this the sum of all sds?
+            cihi = quantile(cumulative_deriv, probs = .95)) 
 saveRDS(avg_cumu_deriv_trend, "outputs/gam_hierarchical_df_overall_cumuderiv.rds")
 
 # plot average biomass trend
@@ -417,9 +528,25 @@ saveRDS(avg_cumu_deriv_trend, "outputs/gam_hierarchical_df_overall_cumuderiv.rds
                 alpha = .3, fill = "#6497b1") +
     geom_line(aes(y = avg_trend), col = "#03396c", lwd = .8) +
     labs(x = "",
-         y = "Average biomass (kg per tow)") +
-    coord_cartesian(ylim = c(-12,12)) +
+         y = "Average difference \nfrom baseline biomass \n(kg per tow)") +
+    coord_cartesian(ylim = c(-5,5)) +
     theme(panel.grid.major.x = element_line()))
+
+# plot average biomass trend
+(A2 = ggplot(data = avg_trend_respscale, aes(x = year)) +
+    # geom_line(data = predictions, aes(x = time, y = biomass, group = sp),
+    #           linewidth = .2, col = "grey") +
+    geom_hline(yintercept = 0, lwd = .3) +
+    # geom_line(data = predictions_respscale,
+    #           aes(x = time, y = biomass, group = sp), lwd = .1, col = "#6497b1") +
+    geom_ribbon(aes(ymin = cilo, ymax = cihi), 
+                alpha = .3, fill = "#6497b1") +
+    geom_line(aes(y = avg_trend), col = "#03396c", lwd = .8) +
+    coord_cartesian(ylim = c(-10,10)) +
+    labs(x = "",
+         y = "Average difference \nfrom baseline biomass \n(kg per tow)") +
+    theme(panel.grid.major.x = element_line()))
+
 # plot avg derivative trend
 (B = ggplot(data = avg_deriv_trend, aes(x = year)) +
     geom_ribbon(aes(ymin = cilo, ymax = cihi), 
@@ -427,12 +554,23 @@ saveRDS(avg_cumu_deriv_trend, "outputs/gam_hierarchical_df_overall_cumuderiv.rds
     geom_line(aes(y = avg_trend), col = "#03396c", lwd = .8) +
     geom_hline(yintercept = 0, lwd = .3) +
     labs(x = "",
-         y = "Average rate of change (kg per tow / year)") +
-    coord_cartesian(ylim = c(-1.3, 1.3)) +
+         y = "Average rate of change \n(kg per tow / year)") +
+    coord_cartesian(ylim = c(-.5, .5)) +
     theme(panel.grid.major.x = element_line()))
-A + B + plot_annotation(tag_levels = "a")
-ggsave("figures/mvgam_prediction.png", width = 8.46, height = 4.06)
 
+(B2 = ggplot(data = avg_deriv_respscale_trend, aes(x = year)) +
+    geom_ribbon(aes(ymin = cilo, ymax = cihi), 
+                alpha = .3, fill = "#6497b1") +
+    geom_line(aes(y = avg_trend), col = "#03396c", lwd = .8) +
+    geom_hline(yintercept = 0, lwd = .3) +
+    labs(x = "",
+         y = "Average rate of change \n(kg per tow / year)") +
+    #coord_cartesian(ylim = c(-.5, .5)) +
+    theme(panel.grid.major.x = element_line()))
+
+A + B + plot_annotation(tag_levels = "a")
+A2 + B2 + plot_annotation(tag_levels = "a") #---- key figure
+ggsave("figures/mvgam_prediction.png", width = 8.46, height = 4.06)
 
 
 # FIGURES ######################################################################
@@ -446,47 +584,64 @@ ggsave("figures/mvgam_prediction.png", width = 8.46, height = 4.06)
             y = y,
             group = sp), lwd = .4, col = "#03396c") +
    theme(legend.position = "none") +
-  labs(x = "Year", y = "Biomass (kg per tow)", col = "Species") +
-   coord_cartesian(ylim = c(-30,10)))
+  labs(x = "Year", y = "Difference in biomass (kg per tow)", col = "Species") +
+   coord_cartesian(ylim = c(-30,5)))
 
-(fig1b = ggplot(data = predictions,
+(fig1b = ggplot(data = predictions_respscale,
                 aes(x = time, group = sp)) +
     geom_hline(yintercept = 0, lwd = .3, col = "grey") +
     geom_ribbon(aes(ymin = cilo, ymax = cihi, group = sp), alpha = .2, fill = "#6497b1") +
     geom_line(aes(y = biomass), lwd = .4, col = "#03396c") +
     theme(legend.position = "none") +
-    coord_cartesian(ylim = c(-30,10)) +
-    labs(x = "Year", y = "Predicted biomass (kg per tow)", fill = "Species"))
+    coord_cartesian(ylim = c(-30,5)) +
+    labs(x = "Year", y = "Predicted difference \nfrom baseline biomass \n(kg per tow)", fill = "Species"))
 
-(fig1c <- ggplot(data = avg_trend, aes(x = year)) +
+(fig1c <- ggplot(data = avg_trend_respscale, aes(x = year)) +
     geom_hline(yintercept = 0, lwd = .3, col = "grey") +
-    geom_ribbon(aes(ymin = cilo, ymax = cihi), 
+    geom_ribbon(aes(ymin = cilo, ymax = cihi),
               alpha = .3, fill = "#6497b1") +
   geom_line(aes(y = avg_trend), col = "#03396c", lwd = .4) +
   labs(x = "Year",
-       y = "Average biomass (kg per tow)") +
-  coord_cartesian(ylim = c(-30,10)) +
+       y = "Average predicted difference \nfrom baseline biomass \n(kg per tow)") +
+  coord_cartesian(ylim = c(-10,2)) +
   theme(panel.grid.major.x = element_line()))
 
-fig1a + fig1b + fig1c + plot_annotation(tag_levels = "a")
-ggsave("figures/fig1.png", width = 11, height = 4.21)
+# plot the trend for an average population ----
 
+newdf <- data.frame(time = time, series = rep(0, tsl)) # zero out ranef terms
+prediction_typicalpop = predict(mod1, newdata = newdf)
+prediction_typicalpop_df = data.frame(
+  time = time+1981,
+  mu = apply(prediction_typicalpop, 2, mean),
+  cilo = apply(prediction_typicalpop, 2, quantile, probs = .05),
+  cihi = apply(prediction_typicalpop, 2, quantile, probs = .95)
+)
+#(fig1c <- 
+  (ggplot(prediction_typicalpop_df) +
+  geom_hline(yintercept = 0, lwd = .3, col = "grey80") +
+  geom_ribbon(aes(x = time, ymin = cilo, ymax = cihi), alpha = .3, fill = "#6497b1") +
+  geom_line(aes(x = time, y = mu), col = "#03396c") +
+  labs(y = "Mean predicted biomass difference", x = "") +
+  coord_cartesian(ylim = c(-5,5)))
+
+(fig1a + fig1b + fig1c) + plot_annotation(tag_levels = "a")
+ggsave("figures/fig1.png", width = 11, height = 4.21)
 
 # fig 2 - distribution of species' rates of change ----
 
 # These plots are coded above
 # arrange the plot panels and save
 (plot_trenddensity + 
-    coord_cartesian(xlim = c(-2.5, 2.5)) +
+    coord_cartesian(xlim = c(-.5, .5)) +
     theme(axis.title.y = element_text(vjust = -60)) #+
   # annotate("text", x = coefs$meansParamX[2]-0.4, y = 1.8, 
   #          label = paste0("\u03bc = ", round(coefs$meansParamX[2], digits = 3),
   #                         "\n \u03c3\u00b2 = ", round(coefs$varX[2,2], digits = 3)))
 ) / (plot_poptrends + 
-       coord_cartesian(xlim = c(-2.5, 2.5)) +
+       coord_cartesian(xlim = c(-.25, .25)) +
        theme(axis.text.y = element_text(face = "italic"),
-             panel.grid.major.x = element_line()) + 
-       scale_fill_distiller(palette = "RdBu", direction = 1, limits = c(-1,1))) +
+             panel.grid.major.x = element_line())) + 
+       #scale_fill_distiller(palette = "RdBu", direction = 1, limits = c(-1,1))) +
   plot_layout(heights = (c(1,3))) +
   plot_annotation(tag_levels = "a")
 ggsave("figures/distribution_poptrends.png", width = 8.23, height = 9)
@@ -495,6 +650,7 @@ ggsave("figures/distribution_poptrends.png", width = 8.23, height = 9)
 # fig 3 - species correlations ----
 
 # get species correlations
+data_train = dat
 sp_correlations = lv_correlations(mod1)
 saveRDS(sp_correlations, "outputs/gam_hierarchical_species_correlations.rds")
 
@@ -539,7 +695,7 @@ rlpi_avgtrend <- read.csv("default_infile_pops_dtemp.csv", row.names = 1) |>
 rlpi_avgtrend$time = readr::parse_number(rlpi_avgtrend$time)
 rlpi_avgtrend = full_join(data.frame(time = 1980, value = 0), rlpi_avgtrend)
 
-(A = ggplot() +
+(rlpi_index = ggplot() +
     geom_ribbon(data = rlpi_results, 
                 aes(ymin = CI_low, ymax = CI_high, x = time), alpha = .3, fill = "#6497b1") + 
     geom_line(data = rlpi_results, aes(x = time, y = LPI_final), col = "#03396c") +
@@ -547,25 +703,160 @@ rlpi_avgtrend = full_join(data.frame(time = 1980, value = 0), rlpi_avgtrend)
     labs(y = "Living Planet Index", x = "") +
     coord_cartesian(ylim = c(0, 2))+
     theme(panel.grid.major.x = element_line()))
-(B = ggplot(data = avg_cumu_deriv_trend, aes(x = year)) +
+
+(avg_derivative_plot = ggplot(data = avg_deriv_respscale_trend, aes(x = year)) +
     geom_ribbon(aes(ymin = cilo, ymax = cihi), 
                 alpha = .3, fill = "#6497b1") +
     geom_line(aes(y = avg_trend), col = "#03396c") +
     geom_hline(yintercept = 0, lwd = .3) +
     labs(x = "",
-         y = "Cumulative change in biomass\n(kg per tow)") +
-    coord_cartesian(ylim = c(-10, 10)) +
+         y = "Average rate of change \n(kg per tow / year)") +
+    coord_cartesian(ylim = c(-.8, .8)) +
     theme(panel.grid.major.x = element_line()))
 
-(C = ggplot(data = avg_deriv_trend, aes(x = year)) +
-    geom_ribbon(aes(ymin = cilo, ymax = cihi), 
-                alpha = .3, fill = "#6497b1") +
-    geom_line(aes(y = avg_trend), col = "#03396c") +
-    geom_hline(yintercept = 0, lwd = .3) +
-    labs(x = "",
-         y = "Average rate of change\n(kg per tow / year)") +
-    coord_cartesian(ylim = c(-1.3, 1.3)) +
-    theme(panel.grid.major.x = element_line()))
+avg_derivative_plot + rlpi_index + plot_annotation(tag_levels = "a")
+ggsave("figures/compare_lpi_mvgam.png", width = 8.68, height = 4.16)
 
-C / B / A + plot_annotation(tag_levels = "a")
-ggsave("figures/compare_lpi_mvgam.png", width = 6.3, height = 8)
+
+# (B = ggplot(data = avg_cumu_deriv_trend, aes(x = year)) +
+#     geom_ribbon(aes(ymin = avg_trend - sd, ymax = avg_trend + sd), 
+#                 alpha = .3, fill = "#6497b1") +
+#     geom_line(aes(y = avg_trend), col = "#03396c") +
+#     geom_hline(yintercept = 0, lwd = .3) +
+#     labs(x = "",
+#          y = "Cumulative change in biomass\n(kg per tow)") +
+#     coord_cartesian(ylim = c(-3, 3)) +
+#     theme(panel.grid.major.x = element_line()))
+
+# (C = ggplot(data = avg_deriv_trend, aes(x = year)) +
+#     geom_ribbon(aes(ymin = cilo, ymax = cihi), 
+#                 alpha = .3, fill = "#6497b1") +
+#     geom_line(aes(y = avg_trend), col = "#03396c") +
+#     geom_hline(yintercept = 0, lwd = .3) +
+#     labs(x = "",
+#          y = "Average rate of change\n(kg per tow / year)") +
+#     coord_cartesian(ylim = c(-.32, .32)) +
+#     theme(panel.grid.major.x = element_line()))
+
+#C / B / A + plot_annotation(tag_levels = "a")
+
+#B + A
+
+
+# avg_deriv_trend$lpi_proxy = 0
+# avg_deriv_trend$lpi_proxy_sd = 0
+# for(i in 2:nrow(avg_deriv_trend)){
+#     
+#   avg_deriv_trend$lpi_proxy[i] = avg_deriv_trend$lpi_proxy[i-1] + avg_deriv_trend$avg_trend[i]
+#   
+#   # cumulative_sum_derivatives[i] = sum(avg_deriv_trend$avg_trend[1:i], na.rm = TRUE)
+#   # cumulative_sum_derivatives_sd[i] = sum(temp2[1:i], na.rm = TRUE)
+# }
+# 
+# avg_index = data.frame(
+#   "time" = time+1981,
+#   "index" = calc_index(avg_deriv_trend$avg_trend),
+#   "lower" = calc_index(avg_deriv_trend$cilo),
+#   "upper" = calc_index(avg_deriv_trend$cihi)
+# )
+
+# ggplot(data = avg_index) +
+#   #geom_ribbon(aes(x = time, ymin = lower, ymax = upper)) +
+#   geom_line(aes(x = time, y = index))
+
+# 
+# 
+# 
+# 
+# ## calculate an index of change ----
+# 
+# # make a function to calculate the change in a population from a baseline value
+# calc_index = function(derivative, baseline = 1){
+#   index = baseline
+#   for(i in 2:tsl){
+#     index[i] = index[i-1]*(1 + derivative[i])
+#   }
+#   return(index)
+# }
+# 
+# #### draw 100 random samples from each species' posterior to make a credible interval
+# # for the average derivative trend
+# index_allperms_perseries = lapply(derivs_respscale_ls, function(x) apply(x, 1, FUN = calc_index))
+# # function(x) apply(x[runif(100, 1, nrow(x)),], 1, FUN = calc_index))
+# index_perspecies = lapply(index_allperms_perseries,
+#                           function(x) apply(x, 1, quantile, probs = c(.05, .5, .95)))
+# names(index_perspecies) = colnames(YData)
+# index_perspecies = lapply(index_perspecies, function(x) as.data.frame(t(x))) 
+# index_perspecies = bind_rows(index_perspecies, .id = "species")
+# colnames(index_perspecies) = c("species", "q05", "q50", "q95")
+# index_perspecies$year = rep(time+1981, npops)
+# 
+# temp = index_perspecies |>
+#   group_by(year) |>
+#   summarise(mean_index = mean(q50))
+# 
+# # draw 100 random samples per species
+# randoms = lapply(index_allperms_perseries, function(x) x[,runif(100, 1, nrow(x))])
+# index_allperms = bind_cols(randoms)
+# index_allperms_summary = data.frame(
+#   "index" = temp$mean_index,
+#   "lower" = apply(index_allperms, 1, quantile, probs = c(.05), na.rm = TRUE),
+#   "upper" = apply(index_allperms, 1, quantile, probs = c(.95), na.rm = TRUE)
+# )
+# index_allperms_summary$year = time+1981
+# 
+# (model_index = ggplot(data = index_allperms_summary, aes(x = year)) +
+#   geom_hline(yintercept = 1, lty = 2) +
+#   geom_ribbon(aes(ymin = lower, ymax = upper), alpha = .3, fill = "#6497b1") +
+#   geom_line(aes(y = index)) +
+#   labs(y = "Index of change in population size", x = ""))
+
+
+# plot the derivatives per species with highlighted main 4 commercially fished species ----
+
+# each species' median derivative 
+derivs_respscale_pops = do.call(cbind, lapply(derivs_respscale_ls, FUN = function(x) apply(x, 2, median, na.rm = TRUE))) 
+derivs_respscale_pops_lower = do.call(cbind, lapply(derivs_respscale_ls, FUN = function(x) apply(x, 2, quantile, probs = .05, na.rm = TRUE)))
+derivs_respscale_pops_upper = do.call(cbind, lapply(derivs_respscale_ls, FUN = function(x) apply(x, 2, quantile, probs = .95, na.rm = TRUE)))
+colnames(derivs_respscale_pops) = colnames(Year_Geom_Means_all)
+colnames(derivs_respscale_pops_lower) = colnames(Year_Geom_Means_all)
+colnames(derivs_respscale_pops_upper) = colnames(Year_Geom_Means_all)
+derivs_respscale_pops_df = derivs_respscale_pops |> 
+  as.data.frame() |> 
+  mutate(year = time + 1981) |>
+  pivot_longer(cols = -year)
+derivs_respscale_pops_df_lower = derivs_respscale_pops_lower |> 
+  as.data.frame() |> 
+  mutate(year = time + 1981) |>
+  pivot_longer(cols = -year, values_to = "lower")
+derivs_respscale_pops_df_upper = derivs_respscale_pops_upper |> 
+  as.data.frame() |> 
+  mutate(year = time + 1981) |>
+  pivot_longer(cols = -year, values_to = "upper")
+derivs_respscale_pops_df = full_join(derivs_respscale_pops_df, derivs_respscale_pops_df_lower) |>
+  full_join(derivs_respscale_pops_df_upper)
+# set first time step's derivative to 0
+derivs_respscale_pops_df$value[which(derivs_respscale_pops_df$year == 1981)] <- 0
+derivs_respscale_pops_df$lower[which(derivs_respscale_pops_df$year == 1981)] <- 0
+derivs_respscale_pops_df$upper[which(derivs_respscale_pops_df$year == 1981)] <- 0
+
+derivs_respscale_pops_df$name = gsub("_", " ", derivs_respscale_pops_df$name) |> 
+  stringr::str_to_sentence()
+derivs_respscale_pops_df$name =  factor(derivs_respscale_pops_df$name,
+                              levels = temporal_trend$species[order(temporal_trend$mu_deriv)])
+
+ggplot(data = derivs_respscale_pops_df, 
+       aes(x = year, group = name)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = name), alpha = .3) +
+  geom_line(aes(y = value), lwd = .2) +
+  labs(x = "",
+       fill = "Species",
+       y = "Rate of change in biomass \n(kg per tow / year)") +
+  gghighlight::gghighlight(name %in% c("Gadus morhua",
+                                       "Hippoglossoides platessoides",
+                                       "Reinhardtius hippoglossoides",
+                                       "Sebastes mentella"),
+                           use_direct_label = FALSE,
+                           unhighlighted_params = list(colour = NULL)) +
+    theme(legend.position = "right") 
+ggsave("figures/species_derivative_trends.png", width = 8.33, height = 4.25)

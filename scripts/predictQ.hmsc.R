@@ -499,7 +499,7 @@ predictQ.hmsc<-function(object, newdata, type = c("response","link"), conditiona
         #result<-pnorm(apply(res,1:2, mean))
         mu <- apply(res, 1:2, mean)
         q025 <- apply(res, 1:2, function(x) {
-          pnorm(quantile(x, .025))
+          pnorm(quantile(x, .025, type = 8)) # add everywhere ----
         })
         q05 <- apply(res, 1:2, function(x) {
           pnorm(quantile(x, .05))

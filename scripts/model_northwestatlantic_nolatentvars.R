@@ -1,4 +1,4 @@
-# Script to model Northwest Atlantic population trends with HMSC
+# Script to model Northwest Atlantic population trends with HMSC without latent variables
 
 # libraries ----
 
@@ -42,26 +42,16 @@ XData <- as.matrix(time)
 
 YData <- as.matrix(Year_Geom_Means_all) 
 
-# scale
 YData <- apply(YData, 2, scale, center = FALSE)
 
 # instead of centering on the mean, center on the baseline biomass
 for(i in 1:ncol(YData)){
-  YData[,i] = YData[,i] - YData[1,i] 
+  YData[,i] = YData[,i] - YData[1,i]
 }
-
-# log-transform abundance
-# YData <- apply(YData, 2, function(x) log(x + 0.001*mean(x)))
-
-# hist(YData)
-
-# set random effect per year
-randomEff <- as.factor(1:tsl) 
 
 # prepare data
 formDat <- as.HMSCdata(X = XData, 
                        Y = YData, 
-                       Random = randomEff, 
                        interceptX = TRUE,
                        scaleX = TRUE)
 
@@ -71,13 +61,13 @@ priors <- as.HMSCprior(data = formDat, family = "gaussian")
 # run model
 m <- hmsc(formDat,
           family = "gaussian",
-          niter = 50000,
-          nburn = 30000,
+          niter = 15000,
+          nburn = 1000,
           thin = 1,
           verbose = FALSE,
           priors = priors)
 # save model
-saveRDS(m, "models/hmsc.RDS")
+saveRDS(m, "models/hmsc_nolatentvars.RDS")
 
 
 ################################################################################
@@ -89,12 +79,12 @@ mcmcMeansParamX <- as.mcmc(m, parameters = "meansParamX")
 
 # check for parameter convergence 
 bayesplot::mcmc_trace(mcmcMeansParamX)
-ggsave("figures/traceplots_meansparamX.png", width = 10, height = 4)
+ggsave("figures/traceplots_meansparamX_nolatentvars.png", width = 10, height = 4)
 
 # Explanatory power ----
 (R2comm <- Rsquared(m, averageSp = TRUE, type = "ols"))
 (R2pops <- Rsquared(m, averageSp = FALSE, type = "ols") |> as.data.frame())
-write.csv(R2pops, "outputs/R2_populationmodels.csv")
+write.csv(R2pops, "outputs/R2_populationmodels_nolatentvars.csv")
 R2pops$species = rownames(R2pops)
 
 ################################################################################
@@ -102,7 +92,7 @@ R2pops$species = rownames(R2pops)
 ## Predict the model ----
 
 # prepare and format data
-formPredDat = as.HMSCdata(X = XData, Random = randomEff)
+formPredDat = as.HMSCdata(X = XData)
 
 # predict population size over time from the model
 
@@ -127,7 +117,7 @@ pred_avgtrend = data.frame(
   q025 = pred$overall_q025,
   q975 = pred$overall_q975
 )
-write.csv(pred_avgtrend, "outputs/pred_avgtrend.csv", row.names = FALSE)
+write.csv(pred_avgtrend, "outputs/pred_avgtrend_nolatentvars.csv", row.names = FALSE)
 
 # plot the model predictions
 
@@ -141,7 +131,8 @@ YData_l = YData |> as.data.frame() |>
                 aes(ymin = q025, ymax = q975, x = year),
                 alpha = .3, fill = "#6497b1") +
     geom_line(data = pred_avgtrend, aes(x = year, y = mu), lwd = 1, col = "#03396c") +
-    labs(y = "Biomass", x = "Year", title = "Observations"))
+    labs(y = "Biomass", x = "Year", title = "Observations") +
+    coord_cartesian(ylim = c(-3,4)))
 
 
 (B = ggplot() +
@@ -152,10 +143,11 @@ YData_l = YData |> as.data.frame() |>
               aes(x = year, y = value, group = name), col = "#005b96", lwd = .1) +
     geom_line(data = pred_avgtrend, aes(x = year, y = mu), lwd = 1, col = "#03396c") +
     labs(x = "Year", y = "Biomass (scaled)", title = "Predictions") +
-    ggpubr::theme_pubr()) # %>% plotly::ggplotly()
+    ggpubr::theme_pubr() +
+    coord_cartesian(ylim = c(-3,4))) # %>% plotly::ggplotly()
 
 A + B + plot_annotation(tag_levels = "a")
-ggsave("figures/hmsc_prediction.png", width = 10.22, height = 5.22)
+ggsave("figures/hmsc_prediction_nolatentvars.png", width = 10.22, height = 5.22)
 
 
 ################################################################################
@@ -166,7 +158,7 @@ ggsave("figures/hmsc_prediction.png", width = 10.22, height = 5.22)
 coefs = coef(m)
 
 # get variance of the parameter estimates for each population
-poptrend_var = apply(m$results$estimation$paramX, 1:2, var) |> as.data.frame() # sd or 95
+poptrend_var = apply(m$results$estimation$paramX, 1:2, var) |> as.data.frame()
 
 # prepare to plot population temporal slopes
 temp = as.data.frame(coefs$paramX)
@@ -175,7 +167,7 @@ temp$pop = gsub("_", " ", temp$pop) |> stringr::str_to_sentence()
 temp$pop <- factor(temp$pop, levels = temp$pop[order(temp$x1)])
 temp <- cbind(temp, poptrend_var$x1)
 colnames(temp)[4] = "x1_var"
-write.csv(temp, "outputs/poptrends.csv", row.names = FALSE)
+write.csv(temp, "outputs/poptrends_nolatentvars.csv", row.names = FALSE)
 
 (plot_poptrends = 
     ggplot(data = temp) +
@@ -185,15 +177,11 @@ write.csv(temp, "outputs/poptrends.csv", row.names = FALSE)
     labs(y = "", x = "Temporal slope estimates (\u03b1)", fill = "\u03b1") +
     geom_vline(xintercept = 0, lwd = .3, lty = 2) +
     geom_vline(xintercept = coefs$meansParamX[2]) +
-    coord_cartesian(xlim = c(-1, 1)
-    ) +
-  scale_fill_distiller(palette = "Spectral", 
-                       limits = c(-1, 1), 
-                       direction = 1) +
+    coord_cartesian(xlim = c(-1, 1))) +
+  scale_fill_distiller(palette = "Spectral", limits = c(-1, 1), direction = 1) +
   theme_pubr() +
   theme(axis.text.y = element_text(face = "italic"),
         panel.grid.major.x = element_line())
-)
 # ggsave("figures/hmsc_populationslopes.png", width = 8.6, height = 7)
 
 
@@ -208,54 +196,26 @@ coef_alliterations = data.frame(z2, z1) |>
                                add = "mean", rug = FALSE, add.params = list(linetype = 1)) +
     labs(x = "Temporal slope estimates (\u03b1)", y = "Density") +
     geom_vline(xintercept = 0, lwd = .3, lty = 2) +
-    theme(legend.position = "none", panel.grid.major.x = element_line()) +
-  coord_cartesian(ylim = c(0, 2.5), xlim = c(-1, 1)) #+
-  # annotate("text", x = coefs$meansParamX[2]-0.3, y = 1.35, 
-  #          label = paste0("\u03bc = ", round(coefs$meansParamX[2], digits = 3),
-  #                         "\n \u03c3\u00b2 = ", round(coefs$varX[2,2], digits = 3)))
-)
+    theme(legend.position = "none", panel.grid.major.x = element_line())) +
+  coord_cartesian(ylim = c(0, 1.4), xlim = c(-1, 1)) +
+  annotate("text", x = coefs$meansParamX[2]-0.3, y = 1.35, 
+           label = paste0("\u03bc = ", round(coefs$meansParamX[2], digits = 3),
+                          "\n \u03c3\u00b2 = ", round(coefs$varX[2,2], digits = 3)))
 
 # arrange the plot panels and save
 (plot_trenddensity + 
+    coord_cartesian(xlim = c(-1,1), ylim = c(0, 1.8)) + 
     theme(axis.title.y = element_text(vjust = -65)) +
-    annotate("text", x = coefs$meansParamX[2]-0.4, y = 1.8, 
+    annotate("text", x = coefs$meansParamX[2]-0.2, y = 1.5, 
              label = paste0("\u03bc = ", round(coefs$meansParamX[2], digits = 3),
                             "\n \u03c3\u00b2 = ", round(coefs$varX[2,2], digits = 3)))) / 
-(plot_poptrends + 
+  (plot_poptrends + coord_cartesian(xlim = c(-1,1)) +
      theme(axis.text.y = element_text(face = "italic"),
            panel.grid.major.x = element_line()) + 
      scale_fill_distiller(palette = "Spectral", limits = c(-1, 1), direction = 1)) + 
-     plot_layout(heights = (c(1,3))) +
-     plot_annotation(tag_levels = "a")
-ggsave("figures/distribution_poptrends.png", width = 8.23, height = 9)
-
-
-################################################################################
-
-## Get species associations ----
-
-# extract all estimated species-to-species associations matrix
-assoMat <- corRandomEff(m)
-
-# Average
-siteMean <- apply(assoMat[, , , 1], 1:2, mean)
-siteLower <- apply(assoMat[, , , 1], 1:2, quantile, prob = c(0.025))
-siteUpper <- apply(assoMat[, , , 1], 1:2, quantile, prob = c(0.975))
-# siteMean[which(siteLower <= 0 & siteUpper >= 0)] <- NA
-
-colnames(siteMean) <- gsub("_", " ", colnames(siteMean)) |> stringr::str_to_sentence()
-rownames(siteMean) <- gsub("_", " ", rownames(siteMean)) |> stringr::str_to_sentence()
-
-which(siteMean[lower.tri(siteMean, diag = FALSE)] > .9) |> length()
-
-# Plot as heatmap
-png(height=1800, width=1800, file="figures/species_associations.png", type = "cairo")
-corrplot::corrplot(siteMean, type = "lower",
-                   method = "color", 
-                   tl.cex = 2.5, cl.cex = 3, tl.col = "black", 
-                   lowCI.mat = siteLower, uppCI.mat = siteUpper,
-                   font = 3)
-dev.off()
+  plot_layout(heights = (c(1,3))) +
+  plot_annotation(tag_levels = "a")
+ggsave("figures/distribution_poptrends_nolatentvars.png", width = 8.23, height = 8.5)
 
 
 ################################################################################
@@ -307,21 +267,21 @@ rlpi_avgtrend = full_join(data.frame(time = 1980, value = 0), rlpi_avgtrend)
 # rlpi_poplpi$time = readr::parse_number(rlpi_poplpi$time)
 
 (A = ggplot() +
-  geom_ribbon(data = rlpi_results, 
-              aes(ymin = CI_low, ymax = CI_high, x = time), alpha = .3, fill = "#6497b1") + 
-  geom_line(data = rlpi_results, aes(x = time, y = LPI_final)) +
-  geom_hline(yintercept = 1, lty = 2, lwd = .5) +
-  labs(title = "Living Planet Index", x = "Year", y = "LPI") +
-  coord_cartesian(ylim = c(-0.2, 1.8)))
+    geom_ribbon(data = rlpi_results, 
+                aes(ymin = CI_low, ymax = CI_high, x = time), alpha = .3, fill = "#6497b1") + 
+    geom_line(data = rlpi_results, aes(x = time, y = LPI_final)) +
+    geom_hline(yintercept = 1, lty = 2, lwd = .5) +
+    labs(title = "Living Planet Index", x = "Year", y = "LPI") +
+    coord_cartesian(ylim = c(-0.2, 1.8)))
 
 (B = ggplot(
   data = pred_avgtrend) +
-  geom_ribbon(aes(ymin = q025, ymax = q975, x = year), 
-              alpha = .3, fill = "#6497b1") + 
-  geom_line(aes(x = year, y = mu)) +
-  geom_hline(yintercept = 0, lty = 2, lwd = .5) +
-  labs(title = "Hierarchical model", x = "Year", y = "Average biomass") +
-  coord_cartesian(ylim = c(-3, 3)))
+    geom_ribbon(aes(ymin = q025, ymax = q975, x = year), 
+                alpha = .3, fill = "#6497b1") + 
+    geom_line(aes(x = year, y = mu)) +
+    geom_hline(yintercept = 0, lty = 2, lwd = .5) +
+    labs(title = "Hierarchical model", x = "Year", y = "Average biomass") +
+    coord_cartesian(ylim = c(-3, 2)))
 
 # (C = ggplot() +
 #     geom_line(data = rlpi_poptrends, aes(x = time, y = value, group = species),
@@ -330,13 +290,8 @@ rlpi_avgtrend = full_join(data.frame(time = 1980, value = 0), rlpi_avgtrend)
 # )
 
 B + A + plot_annotation(tag_levels = "a")
-ggsave("figures/compare_lpi_hmsc.png", width = 11.7, height = 5.16)
+ggsave("figures/compare_lpi_hmsc_nolatentvars.png", width = 11.7, height = 5.16)
 
-
-## correlation between LPI trend and avg model trend
-plot(pred_avgtrend$mu ~ rlpi_results$LPI_final)
-cor.test(pred_avgtrend$mu, rlpi_results$LPI_final)
-lm(pred_avgtrend$mu ~ rlpi_results$LPI_final) |> summary()
 
 ################################################################################
 
