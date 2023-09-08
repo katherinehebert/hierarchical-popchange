@@ -43,24 +43,6 @@ YMeans = apply(Year_Geom_Means_all, 2, mean, na.rm = TRUE)
 baselines = Year_Geom_Means_all[1,] |> as.matrix() |> as.vector()
 weightings = YMeans/sum(YMeans)*100
 
-# plot the contribution of each species to the community's abundance:
-weightings_toplot = data.frame("sp" = stringr::str_to_sentence(gsub("_", " ", names(weightings))),
-           "contribution" = baselines/sum(baselines))
-weightings_toplot$sp = factor(weightings_toplot$sp,
-                              levels = weightings_toplot$sp[order(weightings_toplot$contribution)])
-
-ggplot(data = weightings_toplot) +
-  geom_segment(aes(y = sp, yend = sp,
-                   x = 0, xend = contribution), lwd = .5, col = "#6497b1") +
-  geom_point(aes(y = sp, x = contribution), size = 3, col = "#03396c") +
-  labs(x = "Contribution to the community's baseline biomass",
-       y = "Species") +
-  theme(axis.text.y = element_text(face = "italic")) +
-  scale_x_continuous(labels = scales::percent)
-ggsave("figures/contributions_to_communitybiomass.png", width = 8, height = 5)
-
-contributions_to_baseline = Year_Geom_Means_all[1,]/sum(Year_Geom_Means_all[1,])*100
-
 # format into long
 biomass$time = time
 dat = pivot_longer(biomass, cols = -c(time), names_to = "series", values_to = "y")
@@ -360,6 +342,72 @@ derivs_pops_df$year_factor = factor(derivs_pops_df$year,
   coord_flip()
 ggsave("figures/distribution_yearlytrends_ridgeplot.png", width = 4.03, height = 7.58)
 
+#### average and variance of assemblage per year ----
+
+(temporal_trend_yearly = data.frame(
+  year = rownames(Year_Geom_Means_all),
+  mu_deriv = derivs_pops |> apply(1, median, na.rm = TRUE),
+  lower = derivs_pops |> apply(1, quantile, probs = .05, na.rm = TRUE),
+  upper = derivs_pops |> apply(1, quantile, probs = .95, na.rm = TRUE),
+  sd = derivs_pops |> apply(1, sd, na.rm = TRUE),
+  mu = derivs_pops |> apply(1, mean, na.rm = TRUE)
+))
+temporal_trend_yearly$year = as.character(temporal_trend_yearly$year)
+saveRDS(temporal_trend, "outputs/temporal_trend_yearly.rds")
+
+# coherence ----
+ggplot(data = temporal_trend_yearly) +
+  geom_ribbon(aes(x = as.numeric(year), ymin = mu - sd, ymax = mu + sd), alpha = .2) +
+  geom_line(aes(x = as.numeric(year), y = mu))
+
+ggplot(data = temporal_trend_yearly) +
+  geom_line(aes(x = as.numeric(year), y = sd)) +
+  labs(y = "Assemblage variability (SD)", x = "") 
+
+(plot_coherence = ggplot(data = temporal_trend_yearly) +
+    # geom_segment(aes(x = mu - sd, xend = mu + sd,
+    #                  y = year, yend = year), lwd = .3) +
+    geom_line(aes(y = sd, x = as.numeric(year), col = sd), lwd = 1.5) +
+    geom_point(aes(y = sd, x = as.numeric(year), col = sd), 
+                size = .9) +
+    labs(y = "Community variability (σ)", 
+         x = "",
+         col = "σ") +
+    #scale_color_viridis_c(option = "A", limits = c(0, .2), begin = .2, direction = -1) +
+    scale_color_distiller(palette = "YlGnBu", direction = 1, limits = c(0, .17)) +
+    coord_cartesian(ylim = c(0, .18)) +
+    theme_pubr() +
+    theme(panel.grid.major = element_line())
+)
+
+temporal_trend_yearly$year = as.numeric(temporal_trend_yearly$year)
+(plot_rateofchange = ggplot(data = temporal_trend_yearly) +
+    geom_segment(aes(x = mu - sd, xend = mu + sd,
+                     y = year, yend = year), lwd = .3) +
+    geom_point(aes(x = mu, y = year, fill = mu), 
+               size = 4, pch = 21) +
+    geom_vline(xintercept = 0, lwd = .3, lty = 2) +
+    labs(x = "Rate of change in abundance", 
+         y = "",
+         fill = "μ") +
+    scale_fill_distiller(palette = "RdYlGn", direction = 1, limits = c(-0.06, 0.06)) +
+    #scale_y_discrete(breaks = c( as.character(seq(from = 1980, to = 2013, by = 5)))) +
+    coord_cartesian(xlim = c(-.4, .4)) +
+    theme_pubr() +
+    theme(panel.grid.major.y = element_line()) +
+    coord_flip()
+)
+
+# # correlations?? -----
+# sp_correlations = readRDS("outputs/gam_hierarchical_species_correlations.rds")
+# sp_correlations$posterior_correlations |> length()
+# 
+# # residual variation ----
+# 
+# mod1$resids |> lapply(function(x) apply(x, 2, mean, na.rm = TRUE))
+# do.call(rbind, mod1$resids) |> apply(2, mean, na.rm = TRUE) |> plot()
+
+###### cumulative deriv
 
 derivs_pops_df$cumulative_deriv = NA
 for(n in unique(derivs_pops_df$name)){
@@ -382,9 +430,9 @@ derivs_without1981 = dplyr::filter(derivs_pops_df, year != 1981)
    geom_vline(xintercept = mean(derivs_without1981$value, na.rm = TRUE) + sd(derivs_without1981$value, na.rm = TRUE), lty = 2) +
    theme(panel.grid.major.x = element_line()) +
    scale_y_sqrt() +
-   labs(x = "Annual rate of change", 
+   labs(x = "Annual rate of change (α)", 
         y = "Frequency", 
-        fill = "") +
+        fill = "α") +
    scale_fill_distiller(palette = "RdYlGn", 
                         direction = 1, 
                         limits = c(-.4,.4)) +
@@ -486,7 +534,6 @@ avg_weighted_trend_respscale = data.frame(
 )
 saveRDS(avg_weighted_trend_respscale, "outputs/gam_hierarchical_df_overall_weighted_respscale.rds")
 
-
 # avg biomass trend as proportion of baseline biomass ====
 avg_trend_vsbaseline = data.frame(
   "year" = time+1981,
@@ -507,43 +554,6 @@ avg_deriv_trend = data.frame(
   )
 avg_deriv_trend[1,2:4] = 0
 saveRDS(avg_deriv_trend, "outputs/gam_hierarchical_df_overall_deriv.rds")
-
-# weighted avg derivative ----
-# matrix_weightings = rep(weightings, each = 30000)
-# matrix_weightings[which(is.na(derivs))] <- 0
-# avg_weighted_deriv_trend = data.frame(
-#   "year" = time+1981,
-#   "avg_trend" = apply(derivs, 2, Hmisc::wtd.mean, weights = rep(weightings, each = 30000), normwt = TRUE, na.rm = TRUE)#,
-#  # "cilo" = apply(derivs, 2, Hmisc::wtd.quantile, prob = .05, weights = matrix_weightings, normwt = TRUE, na.rm = TRUE)#,
-#  # "cihi" = apply(derivs, 2, Hmisc::wtd.quantile, prob = .95, weights = rep(weightings, each = 30000), normwt = TRUE, na.rm = TRUE)
-# )
-# avg_weighted_deriv_trend[1,2:4] = 0
-# saveRDS(avg_weighted_deriv_trend, "outputs/gam_hierarchical_df_overall_deriv_weighted.rds")
-
-# average cumulative change trend ----
-# avg_cumu_deriv_trend = derivs_pops_df |>
-#   group_by(year) |>
-#   summarise(avg_trend = median(cumulative_deriv),
-#             cilo = quantile(cumulative_deriv, probs = .05),
-#             cihi = quantile(cumulative_deriv, probs = .95)) 
-
-# cumsum_deriv <- function(dt){
-#   cumulative_dt = 0
-#   for(i in 2:tsl){
-#     cumulative_dt[i] = sum(dt[1:i], na.rm = TRUE)
-#   }
-#   return(cumulative_dt)
-# }
-# 
-# # calculate cumulative derivative for all permutations
-# 
-# avg_cumu_deriv_trend = data.frame(
-#   "year" = avg_deriv_trend$year,
-#   "avg_trend" = cumsum_deriv(avg_deriv_trend$avg_trend),
-#   "lower" = cumsum_deriv(avg_deriv_trend$cilo),
-#   "upper" = cumsum_deriv(avg_deriv_trend$cihi)
-# )
-# saveRDS(avg_cumu_deriv_trend, "outputs/gam_hierarchical_df_overall_cumuderiv.rds")
 
 # plot average biomass trend
 (A = ggplot(data = avg_trend, aes(x = year)) +
@@ -617,9 +627,12 @@ ggsave("figures/mvgam_prediction.png", width = 8.46, height = 4.06)
 
 (avg_derivative_plot = ggplot(data = avg_deriv_trend, aes(x = year)) +
     geom_ribbon(aes(ymin = cilo, ymax = cihi), 
-                alpha = .3, fill = "#6497b1") +
-    geom_line(aes(y = avg_trend), col = "#03396c") +
+                alpha = .3, fill = "slategray") +
+    geom_line(aes(y = avg_trend), col = "black") +
     geom_hline(yintercept = 0, lwd = .3) +
+    scale_fill_distiller(palette = "RdYlGn", 
+                         direction = 1, 
+                         limits = c(-.06,.06)) +
     labs(x = "",
          y = "Average annual rate of change") +
     coord_cartesian(ylim = c(-.5, .5)) +
@@ -628,22 +641,115 @@ ggsave("figures/mvgam_prediction.png", width = 8.46, height = 4.06)
 
 
 #(fig1a + fig1b + fig1c) + plot_annotation(tag_levels = "a")
-fig1a + fig1c + avg_derivative_plot + plot_annotation(tag_levels = "a")
-ggsave("figures/fig1.png", width = 11, height = 4.21)
+fig1a + fig1c + plot_annotation(tag_levels = "a")
+#ggsave("figures/fig1.png", width = 11, height = 4.21)
+ggsave("figures/suppfig_datavspredictedtrend.png", width = 9, height = 4.21)
 
-# fig 2 - distribution of species' rates of change ----
+
+# fig 2 - distribution of rates of change ----
+library(ggdist)
+
+(avg_derivative_pointplot = 
+   ggplot(data = avg_deriv_trend, aes(x = year)) +
+    ggpattern::geom_area_pattern(aes(y = cihi),
+                                 pattern = "gradient", 
+                                 fill = "#ffffbf",
+                                 pattern_fill  = "#ffffbf80",
+                                 pattern_fill2 = "#77c15c") + #prepended w/ 50% transparency hex code (80)
+    ggpattern::geom_area_pattern(aes(y = cilo),
+                                 pattern = "gradient", 
+                                 fill = "#ffffbf",
+                                 pattern_fill  = "#f98c59",
+                                 pattern_fill2 = "#ffffbf80") + #prepended w/ 50% transparency hex code (80)
+    geom_line(aes(y = avg_trend, col = avg_trend), lwd = .1) +
+    geom_line(aes(y = avg_trend), lwd = .8, col = "black") +
+  geom_line(aes(y = cilo), lwd = 1, col = "white") +
+  geom_line(aes(y = cihi), lwd = 1, col = "white") +
+   geom_hline(yintercept = 0, lwd = .3) +
+   #geom_point(aes(y = avg_trend, fill = avg_trend), pch = 21, size = 3) +
+   scale_color_gradientn(colours = c("#d73027", "#f98c59", "#fee08b", "#ffffbf", "#d9ef8b", "#77c15c", "#1a9850"), limits = c(-0.4, 0.4)) +
+    labs(x = "",
+        col = "α",
+        y = "Rate of change (α)") +
+   coord_cartesian(ylim = c(-.5, .5)) +
+   theme(panel.grid.major = element_line(),
+         legend.position = "right") +
+   scale_y_continuous(labels = scales::percent))
 
 # arrange the plot panels and save
-(plot_trenddensity + 
-    coord_cartesian(xlim = c(-.5, .5)) +
-    theme(axis.title.y = element_text(vjust = -60)) #+
-) / (plot_poptrends + 
-       coord_cartesian(xlim = c(-.5, .5)) +
-       theme(axis.text.y = element_text(face = "italic"),
-             panel.grid.major.x = element_line())) + 
-  plot_layout(heights = (c(1,3))) +
+  ((avg_derivative_pointplot) /
+  (plot_coherence + 
+     theme(legend.position = "right"))) +
   plot_annotation(tag_levels = "a")
-ggsave("figures/distribution_poptrends.png", width = 8, height = 9)
+ggsave("figures/assemblagevariability_throughtime.png", width = 9, height = 7)
+
+
+## full assemblage distribution of population variability
+(plot_trenddensity= plot_trenddensity + 
+    theme(legend.position = "right") + 
+    scale_x_continuous(labels = scales::percent))
+
+corr_df = data.frame("value" = sp_correlations$mean_correlations[which(lower.tri(sp_correlations$mean_correlations))],
+                     "group" = rep("A", length(sp_correlations$mean_correlations[which(lower.tri(sp_correlations$mean_correlations))])))
+(correlations_histogram = ggplot(data = corr_df, aes(x = value)) +
+    geom_histogram(aes(fill = after_stat(x)), col = "black", lwd = .2) +
+    scale_fill_distiller(palette = "RdBu", limits = c(-1.1,1.1), direction = 1) +
+    labs(y = "Frequency", x = "Correlation between species (R)", fill = "R") +
+    geom_vline(xintercept = mean(corr_df$value)) +
+    geom_vline(xintercept = mean(corr_df$value) - sd(corr_df$value), lty = 2) + 
+    geom_vline(xintercept = mean(corr_df$value) + sd(corr_df$value), lty = 2) +
+    theme(legend.position = "right")
+)
+
+plot_trenddensity / correlations_histogram + plot_annotation(tag_levels = "a")
+ggsave("figures/assemblage_variability.png", width = 10.5, height = 8)
+
+mean(corr_df$value)
+sd(corr_df$value)
+quantile(corr_df$value, probs = c(.05, .95))
+
+
+# fig 3 - distribution of rates of change per species ----
+
+# plot distribution of each sp' rates of change
+(plot_poptrends + 
+   coord_cartesian(xlim = c(-.5, .5)) +
+   theme(axis.text.y = element_text(face = "italic"),
+         panel.grid.major.x = element_line()))
+
+# plot the contribution of each species to the community's abundance
+weightings_toplot = data.frame("sp" = stringr::str_to_sentence(gsub("_", " ", names(weightings))),
+                               "contribution" = baselines/sum(baselines))
+weightings_toplot$sp = factor(weightings_toplot$sp,
+                              levels = weightings_toplot$sp[order(weightings_toplot$contribution)])
+weightings_orderedbytrend = weightings_toplot
+weightings_orderedbytrend$sp = factor(weightings_orderedbytrend$sp,
+                                      levels = levels(temporal_trend$species))
+(contributions_plot = ggplot(data = weightings_toplot) +
+  geom_segment(aes(y = sp, yend = sp,
+                   x = 0, xend = contribution), lwd = .5, col = "#6497b1") +
+  geom_point(aes(y = sp, x = contribution), size = 3, col = "#03396c") +
+  labs(x = "Contribution to the community's baseline biomass",
+       y = "Species") +
+  theme(axis.text.y = element_text(face = "italic")) +
+  scale_x_continuous(labels = scales::percent))
+ggsave("figures/contributions_to_communitybiomass.png", width = 8, height = 5)
+
+contributions_to_baseline = Year_Geom_Means_all[1,]/sum(Year_Geom_Means_all[1,])*100
+weightings_orderedbytrend$label = paste0(signif(weightings_orderedbytrend$contribution*100, 2), "%")
+(contributions_plot = ggplot(data = weightings_orderedbytrend) +
+    geom_bar(aes(x = contribution, y = sp, fill = contribution), 
+             stat = "identity", fill = "slategrey") +
+    # geom_segment(aes(y = sp, yend = sp,
+    #                  x = 0, xend = contribution), lwd = .5, col = "#6497b1") +
+    # geom_point(aes(y = sp, x = contribution), size = 3, col = "#03396c") +
+    labs(x = "Proportion of the\ncommunity's baseline biomass",
+         y = "") +
+    theme(axis.text.y = element_text(face = "italic")) +
+    scale_x_continuous(labels = scales::percent))
+
+plot_poptrends + contributions_plot + plot_layout(widths = c(3,1)) + plot_annotation(tag_levels = "a")
+ggsave("figures/distribution_perspecies.png", width = 13.5, height = 9)
 
 
 # fig 3 - species correlations ----
@@ -677,7 +783,20 @@ sp_correlations$mean_correlations[which(lower.tri(sp_correlations$mean_correlati
        main = "", cex = 3)
 dev.off()
 
+corr_df = data.frame("value" = sp_correlations$mean_correlations[which(lower.tri(sp_correlations$mean_correlations))],
+                     "group" = rep("A", length(sp_correlations$mean_correlations[which(lower.tri(sp_correlations$mean_correlations))])))
+(correlations_histogram = ggplot(data = corr_df, aes(x = value)) +
+  geom_histogram(aes(fill = after_stat(x))) +
+  scale_fill_distiller(palette = "RdBu", limits = c(-1.1,1.1), direction = 1) +
+  labs(y = "Frequency", x = "Correlation between species (R)", fill = "R") +
+    geom_vline(xintercept = mean(corr_df$value)) +
+    geom_vline(xintercept = mean(corr_df$value) - sd(corr_df$value), lty = 2) + 
+    geom_vline(xintercept = mean(corr_df$value) + sd(corr_df$value), lty = 2)
+    )
 
+mean(corr_df$value)
+sd(corr_df$value)
+quantile(corr_df$value, probs = c(.05, .95))
 
 corrs = sp_correlations$mean_correlations[which(lower.tri(sp_correlations$mean_correlations))]
 
@@ -736,58 +855,6 @@ avg_derivative_plot + rlpi_index + plot_annotation(tag_levels = "a")
 rlpi_index
 ggsave("figures/compare_lpi_mvgam.png", width = 6, height = 4)
 
-## calculate an index of change ----
-
-# # make a function to calculate the change in a population from a baseline value
-# calc_index = function(derivative, baseline = 1){
-#   index = baseline
-#   for(i in 2:tsl){
-#     index[i] = index[i-1]*(1 + derivative[i])
-#   }
-#   return(index)
-# }
-# 
-# #### draw 100 random samples from each species' posterior to make a credible interval
-# # for the average derivative trend
-# index_allperms_perseries = lapply(derivs_ls, function(x) apply(x, 1, FUN = calc_index))
-# # # function(x) apply(x[runif(100, 1, nrow(x)),], 1, FUN = calc_index))
-# # index_perspecies = lapply(index_allperms_perseries,
-# # function(x) apply(x, 1, quantile, probs = c(.05, .5, .95)))
-# # names(index_perspecies) = colnames(YData)
-# # index_perspecies = lapply(index_perspecies, function(x) as.data.frame(t(x)))
-# # index_perspecies = bind_rows(index_perspecies, .id = "species")
-# # colnames(index_perspecies) = c("species", "q05", "q50", "q95")
-# # index_perspecies$year = rep(time+1981, npops)
-# 
-# # temp = index_perspecies |>
-# #   group_by(year) |>
-# #   summarise(mean_index = mean(q50),
-# #             sd_index = sd(q50))
-# 
-# # draw 100 random samples per species
-# randoms = lapply(index_allperms_perseries, function(x) x[,runif(100, 1, nrow(x))])
-# index_allperms = bind_cols(randoms)
-# index_allperms_summary = data.frame(
-#   #"index" = temp$mean_index,
-#   # "lower_sd" = temp$mean_index - temp$sd_index,
-#   # "upper_sd" = temp$mean_index + temp$sd_index,
-#   "index" = apply(index_allperms, 1, quantile, probs = c(.5), na.rm = TRUE),
-#   "lower" = apply(index_allperms, 1, quantile, probs = c(.05), na.rm = TRUE),
-#   "upper" = apply(index_allperms, 1, quantile, probs = c(.95), na.rm = TRUE)
-# )
-# index_allperms_summary$year = time+1981
-# 
-# 
-# calc_index(avg_deriv_trend$avg_trend)
-# calc_index(avg_deriv_trend$cilo)
-# calc_index(avg_deriv_trend$cihi)
-# 
-# (model_index = ggplot(data = index_allperms_summary, aes(x = year)) +
-#   geom_hline(yintercept = 1, lty = 2) +
-#   geom_ribbon(aes(ymin = lower, ymax = upper), alpha = .3, fill = "#6497b1") +
-#   geom_line(aes(y = index)) +
-#   labs(y = "Index of change in population size", x = "")) + coord_cartesian(ylim = c(0,2))
-# ggsave("figures/index_popsize.png", width = 5.72, height = 4.82)
 
 # plot the derivatives per species with highlighted main 4 commercially fished species ----
 
@@ -813,3 +880,5 @@ ggplot(data = derivs_pops_df,
   ggsci::scale_fill_nejm() + ggsci::scale_color_nejm() +
   scale_y_continuous(labels = scales::percent)
 ggsave("figures/species_derivative_trends.png", width = 8.33, height = 4.25)
+
+
