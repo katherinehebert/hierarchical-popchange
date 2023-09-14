@@ -78,11 +78,21 @@ test_priors <- get_mvgam_priors(y ~
                                 data = data_train,
                                 trend_model = 'GP',
                                 use_stan = TRUE)
+write.csv(test_priors, "outputs/test_priors.csv")
 
 # look at the priors
-plot(mvgam_prior, type = 'smooths', realisations = TRUE)
-plot(mvgam_prior, type = 'trend')
+plot(mvgam_prior, type = 'smooths')
+
+png("figures/trend_priors.png", width = 1000, height = 1300, type = "cairo")
+par(mfrow = c(6,5))
+for(i in 1:ncol(Year_Geom_Means_all)){
+  plot(mvgam_prior, type = 'trend', series = i)
+} 
+dev.off()
+
+png("figures/re_priors.png", width = 1000, height = 700, type = "cairo")
 plot(mvgam_prior, type = 're')
+dev.off()
 
 # train the model on data ----
 mod1 <- mvgam(data = data_train,
@@ -280,6 +290,7 @@ temporal_trend$species = gsub("_", " ", temporal_trend$species) |> stringr::str_
 temporal_trend$species =  factor(temporal_trend$species,
                                  levels = temporal_trend$species[order(temporal_trend$mu_deriv)])
 saveRDS(temporal_trend, "outputs/temporal_trend.rds")
+temporal_trend = readRDS("outputs/temporal_trend.rds")
 
 colnames(derivs_pops) = colnames(Year_Geom_Means_all)
 colnames(derivs_pops_lower) = colnames(Year_Geom_Means_all)
@@ -353,16 +364,9 @@ ggsave("figures/distribution_yearlytrends_ridgeplot.png", width = 4.03, height =
   mu = derivs_pops |> apply(1, mean, na.rm = TRUE)
 ))
 temporal_trend_yearly$year = as.character(temporal_trend_yearly$year)
-saveRDS(temporal_trend, "outputs/temporal_trend_yearly.rds")
+saveRDS(temporal_trend_yearly, "outputs/temporal_trend_yearly.rds")
 
 # coherence ----
-ggplot(data = temporal_trend_yearly) +
-  geom_ribbon(aes(x = as.numeric(year), ymin = mu - sd, ymax = mu + sd), alpha = .2) +
-  geom_line(aes(x = as.numeric(year), y = mu))
-
-ggplot(data = temporal_trend_yearly) +
-  geom_line(aes(x = as.numeric(year), y = sd)) +
-  labs(y = "Assemblage variability (SD)", x = "") 
 
 (plot_coherence = ggplot(data = temporal_trend_yearly) +
     # geom_segment(aes(x = mu - sd, xend = mu + sd,
@@ -520,7 +524,10 @@ avg_trend_respscale = data.frame(
   "year" = time+1981,
   "avg_trend" = apply(preds_respscale, 2, mean),
   "cilo" = apply(preds_respscale, 2, quantile, prob = .05),
-  "cihi" = apply(preds_respscale, 2, quantile, prob = .95)
+  "cihi" = apply(preds_respscale, 2, quantile, prob = .95),
+  "q50" = apply(preds_respscale, 2, quantile, prob = .5),
+  "q025" = apply(preds_respscale, 2, quantile, prob = .025),
+  "q975" = apply(preds_respscale, 2, quantile, prob = .975)
 )
 saveRDS(avg_trend_respscale, "outputs/gam_hierarchical_df_overall_respscale.rds")
 
@@ -539,9 +546,9 @@ avg_trend_vsbaseline = data.frame(
   "year" = time+1981,
   "avg_trend" = apply(preds_vsbaseline, 2, mean, na.rm = TRUE),
   "cilo" = apply(preds_vsbaseline, 2, quantile, prob = .05),
-  "cihi" = apply(preds_vsbaseline, 2, quantile, prob = .95)
+  "cihi" = apply(preds_vsbaseline, 2, quantile, prob = .95),
 )
-saveRDS(avg_trend_respscale, "outputs/gam_hierarchical_df_overall_preds_vsbaseline.rds")
+saveRDS(avg_trend_vsbaseline, "outputs/gam_hierarchical_df_overall_preds_vsbaseline.rds")
 
 
 # avg derivative ----
@@ -615,14 +622,15 @@ ggsave("figures/mvgam_prediction.png", width = 8.46, height = 4.06)
     coord_cartesian(ylim = c(-30,10)) +
     labs(x = "Year", y = "Predicted difference \nfrom baseline biomass \n(kg per tow)", fill = "Species"))
 
+avg_trend_respscale = readRDS("outputs/gam_hierarchical_df_overall_respscale.rds")
 (fig1c <- ggplot(data = avg_trend_respscale, aes(x = year)) +
     geom_hline(yintercept = 0, lwd = .3, col = "grey") +
-    geom_ribbon(aes(ymin = cilo, ymax = cihi),
-              alpha = .3, fill = "#6497b1") +
+    #geom_ribbon(aes(ymin = cilo, ymax = cihi), alpha = .3, fill = "#6497b1") +    
+    geom_ribbon(aes(ymin = q025, ymax = q975), alpha = .3, fill = "#6497b1") +
   geom_line(aes(y = avg_trend), col = "#03396c", lwd = .4) +
   labs(x = "Year",
        y = "Average predicted difference \nfrom baseline biomass \n(kg per tow)") +
-  coord_cartesian(ylim = c(-10,10)) +
+  coord_cartesian(ylim = c(-20,20)) +
   theme(panel.grid.major.x = element_line()))
 
 (avg_derivative_plot = ggplot(data = avg_deriv_trend, aes(x = year)) +
@@ -677,11 +685,12 @@ library(ggdist)
    scale_y_continuous(labels = scales::percent))
 
 # arrange the plot panels and save
-  ((avg_derivative_pointplot) /
+((plot_trenddensity + theme(legend.position = "right"))/
+  (avg_derivative_pointplot) /
   (plot_coherence + 
      theme(legend.position = "right"))) +
   plot_annotation(tag_levels = "a")
-ggsave("figures/assemblagevariability_throughtime.png", width = 9, height = 7)
+ggsave("figures/assemblagevariability.png", width = 7.5, height = 7)
 
 
 ## full assemblage distribution of population variability
@@ -851,9 +860,8 @@ rlpi_avgtrend = full_join(data.frame(time = 1980, value = 0), rlpi_avgtrend)
     theme(panel.grid.major.x = element_line()) +
     scale_y_continuous(labels = scales::percent))
 
-avg_derivative_plot + rlpi_index + plot_annotation(tag_levels = "a")
-rlpi_index
-ggsave("figures/compare_lpi_mvgam.png", width = 6, height = 4)
+rlpi_index / (fig1c + labs(x = "")) + plot_annotation(tag_levels = "a")
+ggsave("figures/compare_lpi_mvgam.png", width = 6, height = 7)
 
 
 # plot the derivatives per species with highlighted main 4 commercially fished species ----
