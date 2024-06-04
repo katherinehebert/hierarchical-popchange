@@ -43,6 +43,14 @@ YMeans = apply(Year_Geom_Means_all, 2, mean, na.rm = TRUE)
 baselines = Year_Geom_Means_all[1,] |> as.matrix() |> as.vector()
 weightings = YMeans/sum(YMeans)*100
 
+biomass_scaling = list(
+  "biomass" = biomass,
+  "YMeans" = YMeans,
+  "baselines" = baselines,
+  "weightings" = weightings
+)
+saveRDS(biomass_scaling, "outputs/biomass_scaling.rds")
+
 # format into long
 biomass$time = time
 dat = pivot_longer(biomass, cols = -c(time), names_to = "series", values_to = "y")
@@ -51,11 +59,29 @@ dat$time <- as.integer(dat$time)
 data_train = dat
 
 ################################################################################
+# check number of knots ----
+
+knots = ceiling(tsl/4)
+
+kcheck_gam = mgcv::gam(y ~ s(time, bs = "tp", k = 9) + s(series, bs = 're', k = npops),
+            data = data_train)
+summary(kcheck_gam)
+mgcv::k.check(kcheck_gam)
+mgcv::gam.check(kcheck_gam)
+
+kcheck_gam = mgcv::gam(y ~ s(time, bs = "tp", k = 18) + s(series, bs = 're', k = npops),
+                       data = data_train)
+summary(kcheck_gam)
+mgcv::k.check(kcheck_gam)
+mgcv::gam.check(kcheck_gam)
+
+
+################################################################################
 
 # hierarchical gam on all populations ----
 
 # prepare the priors ----
-knots = ceiling(tsl/4)
+
 mvgam_prior <- mvgam(data = data_train,
                      formula = y ~ 
                        # global smoother for all pops over time
@@ -229,7 +255,7 @@ for(i in 1:length(predictions_respscale_perc)){
 }
 predictions_respscale_perc = bind_rows(predictions_respscale_perc)
 
-
+# this may be the spot to mess with ----
 (plot_biomassdiff = ggplot(data = predictions_respscale_perc) +
     geom_line(aes(y = biomass, x = time, group = sp)) +
     geom_hline(yintercept = 0, lwd = .3, lty = 2) +
@@ -604,7 +630,7 @@ ggsave("figures/mvgam_prediction.png", width = 8.46, height = 4.06)
 
 # fig 1. data and model predictions of biomass ----
 
-(fig1a = ggplot(data = dat) +
+(fig1a = ggplot(data = mod1$obs_data) +
    geom_hline(yintercept = 0, lwd = .3, col = "grey") +
   geom_line(aes(x = time+1981,
             y = y*YMeans,
@@ -632,21 +658,6 @@ avg_trend_respscale = readRDS("outputs/gam_hierarchical_df_overall_respscale.rds
        y = "Average predicted difference \nfrom baseline biomass \n(kg per tow)") +
   coord_cartesian(ylim = c(-20,20)) +
   theme(panel.grid.major.x = element_line()))
-
-(avg_derivative_plot = ggplot(data = avg_deriv_trend, aes(x = year)) +
-    geom_ribbon(aes(ymin = cilo, ymax = cihi), 
-                alpha = .3, fill = "slategray") +
-    geom_line(aes(y = avg_trend), col = "black") +
-    geom_hline(yintercept = 0, lwd = .3) +
-    scale_fill_distiller(palette = "RdYlGn", 
-                         direction = 1, 
-                         limits = c(-.06,.06)) +
-    labs(x = "",
-         y = "Average annual rate of change") +
-    coord_cartesian(ylim = c(-.5, .5)) +
-    theme(panel.grid.major.x = element_line()) +
-    scale_y_continuous(labels = scales::percent))
-
 
 #(fig1a + fig1b + fig1c) + plot_annotation(tag_levels = "a")
 fig1a + fig1c + plot_annotation(tag_levels = "a")
