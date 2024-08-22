@@ -538,6 +538,6 @@ plot_mvgam_smooth_custom <- function (object, series = 1, smooth, residuals = FA
     }
   }
   
-  return("cred" = cred)
+  return("derivs" = first_derivs)
 }
 

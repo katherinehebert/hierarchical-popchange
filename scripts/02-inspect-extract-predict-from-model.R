@@ -32,9 +32,6 @@ png("figures/traceplots_timebases.png", height=1800, width=1800, type = "cairo")
 rstan::stan_trace(mod1$model_output, 'b')
 dev.off()
 
-## lfo cross-validation just added to mvgam ----
-#lfo_cv.mvgam()
-
 ## Plot the temporal trend (time smooth) without population random effect----
 
 png("figures/timesmooth.png", height=1000, width=1000, type = "cairo")
