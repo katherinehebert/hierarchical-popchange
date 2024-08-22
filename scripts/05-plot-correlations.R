@@ -24,10 +24,7 @@ set.seed(12)
 biomass_scaling = readRDS("outputs/biomass_scaling.rds")
 mod1 = readRDS(paste0("outputs/gam_hierarchical_gp.rds"))
 data_train = mod1$obs_data
-
-# calculate species correlations -----------------------------------------------
-sp_correlations = lv_correlations(mod1)
-saveRDS(sp_correlations, "outputs/gam_hierarchical_species_correlations.rds")
+sp_correlations = readRDS("outputs/gam_hierarchical_species_correlations.rds")
 
 # clean up the species names 
 
