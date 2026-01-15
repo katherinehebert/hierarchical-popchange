@@ -18,22 +18,27 @@ set.seed(12)
 
 # read the previous data objects and the model object ----
 biomass_scaling = readRDS("outputs/biomass_scaling.rds")
-mod1 = readRDS(paste0("outputs/gam_hierarchical_gp.rds"))
+mod1 = readRDS(paste0("outputs/gam_hierarchical_gp_2025.rds"))
 biomass = biomass_scaling$biomass
 
 # to view the Stan model file:
 m <- mod1
 # save the model file
 cmdstanr::write_stan_file(m$model_file, "stan")
-summary(mod1)
+summary(m)
 
 # convergence
 png("figures/traceplots_timebases.png", height=1800, width=1800, type = "cairo")
 rstan::stan_trace(mod1$model_output, 'b')
 dev.off()
 
-## lfo cross-validation just added to mvgam ----
-#lfo_cv.mvgam()
+## forecast ----
+newdata = mod1$obs_data
+newdata$time = newdata$time + 32
+fore = mvgam::forecast(mod1, newdata = newdata)
+saveRDS(fore, "outputs/forecast.rds")
+plot(fore,series = 10)
+forescore = score(fore)
 
 ## Plot the temporal trend (time smooth) without population random effect----
 
@@ -57,12 +62,56 @@ png("figures/mvgam_latentfactorplot.png", height=1000, width=1800, type = "cairo
 plot_mvgam_factors(mod1)
 dev.off()
 
+# Plot the ppc
+pdf("figures/mvgam_pp_check.pdf",onefile = TRUE)
+  pp_check(mod1, type = "ecdf_overlay",
+           newdata = list(
+    time = mod1$obs_data$time,
+    series = factor(mod1$obs_data$series),
+    y = mod1$obs_data$y,
+    knots = 9,
+    npops = 29))
+  
+  pp_check(mod1, type = "resid_ribbon",
+           newdata = list(
+             time = mod1$obs_data$time,
+             series = factor(mod1$obs_data$series),
+             y = mod1$obs_data$y,
+             knots = 9,
+             npops = 29))
+  
+dev.off()
+
+# Plot the ppc
+pdf("figures/mvgam_ppc.pdf",onefile = TRUE)
+for(i in 1:ncol(biomass)){
+ppc(mod1,series = i)
+}
+dev.off()
+
+
+# Plot the ppc
+pdf("figures/mvgam_ppc_cdf.pdf",onefile = TRUE)
+for(i in 1:ncol(biomass)){
+  ppc(mod1,series = i, type = "cdf")
+}
+dev.off()
+
+# Plot the ppc
+pdf("figures/mvgam_ppc_mean.pdf",onefile = TRUE)
+for(i in 1:ncol(biomass)){
+  ppc(mod1,series = i, type = "mean")
+}
+dev.off()
+
+ppc(mod1,type = "mean")
+
 # plot(mod1)
 
 # extract posterior draws in an array format
 draws_fit = m$model_output |> posterior::as_draws_matrix() # mvgam_draws() now exists too
 posterior_df = posterior::summarize_draws(draws_fit)
-saveRDS(posterior_df, "outputs/gam_hierarchical_posterior.rds")
+saveRDS(posterior_df, "outputs/gam_hierarchical_posterior_2025.rds")
 
 coefs_summ = coef(m, summarise = TRUE) |> as.data.frame()
 saveRDS(coefs_summ, "outputs/gam_hierarchical_coefs_summary.rds")

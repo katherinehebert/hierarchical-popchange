@@ -75,12 +75,6 @@ summary(kcheck_gam)
 mgcv::k.check(kcheck_gam)
 mgcv::gam.check(kcheck_gam)
 
-kcheck_gam = mgcv::gam(y ~ s(time, bs = "tp", k = 18) + s(series, bs = 're', k = npops),
-                       data = data_train)
-summary(kcheck_gam)
-mgcv::k.check(kcheck_gam)
-mgcv::gam.check(kcheck_gam)
-
 
 ################################################################################
 
@@ -136,6 +130,8 @@ mod1 <- mvgam(data = data_train,
               use_stan = TRUE,
               chains = 3, 
               burnin = 5000,
-              samples = 10000
+              samples = 10000,
+              parellel = TRUE
 )
-saveRDS(mod1, paste0("outputs/gam_hierarchical_gp.rds")) 
+#saveRDS(mod1, paste0("outputs/gam_hierarchical_gp.rds")) 
+saveRDS(mod1, paste0("outputs/gam_hierarchical_gp_2025.rds")) 

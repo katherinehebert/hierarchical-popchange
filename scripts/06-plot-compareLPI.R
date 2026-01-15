@@ -97,3 +97,11 @@ palette_col = c("DGAM" = "maroon", "LPI" = "#03396c")
           panel.grid.major.y = element_line()))
 
 ggsave("figures/compare_lpi_mvgam.png", width = 5.8, height = 5.2)
+
+
+## Alternatively, calculate the LPI based on the time smoother -----------------
+## which represents the common temporal trend across species
+
+png("figures/time_smooth_deriv.png")
+plot_mvgam_smooth(mod1, derivatives = FALSE)
+dev.off()
