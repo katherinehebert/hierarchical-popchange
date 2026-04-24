@@ -70,7 +70,7 @@ calclpi <- function(dt, dt_cilo, dt_cihi){
 
 # calculate the LPI for the whole assemblage, based on the HGAM results
 dgam_lpi =  calclpi(avg_deriv_trend$avg_trend, avg_deriv_trend$cilo, avg_deriv_trend$cihi)
-dgam_lpi$time = time+1981
+dgam_lpi$time = rlpi_results$time
 
 # Plot the two index trends ####################################################
 
