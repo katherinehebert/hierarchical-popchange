@@ -28,6 +28,8 @@ mod1 = readRDS(paste0("outputs/gam_hierarchical_gp.rds"))
 biomass = biomass_scaling$biomass
 derivs_pops_df = readRDS("outputs/derivs_pops_df.rds")
 temporal_trend_yearly = readRDS("outputs/temporal_trend_yearly.rds")
+temporal_trend = readRDS("outputs/temporal_trend.rds")
+avg_deriv_trend = readRDS("outputs/gam_hierarchical_df_overall_deriv.rds")
 
 # plot a histogram of the average derivatives across all species ---------------
 
@@ -153,6 +155,8 @@ var(derivs_without1981$value, na.rm = TRUE)
     theme(panel.grid.major = element_line())
 )
 
+mean(temporal_trend_yearly$sd[2:10])
+
 # Arrange the plot panels and save ---------------------------------------------
 ((plot_trenddensity + 
     theme(legend.position = "right"))/
@@ -163,3 +167,20 @@ var(derivs_without1981$value, na.rm = TRUE)
 ggsave("figures/assemblagevariability.png", width = 7.5, height = 7)
 
 
+# Plot growth rate versus variance
+
+df = 
+  data.frame(
+    "year" = as.numeric(temporal_trend_yearly$year),
+    "mu" = avg_deriv_trend$avg_trend,
+    "var" = temporal_trend_yearly$sd
+  )
+
+ggplot(data = df) +
+  geom_path(aes(x = mu, y = var), linewidth = .1) +
+  geom_point(aes(x = mu, y = var, col = as.numeric(year)), size = 3) +
+  scale_color_viridis_c(option = "turbo", end = 0, begin = 1) +
+  coord_cartesian(xlim = c(-.08,.08)) +
+  labs(x = "Rate of change (α)", y = "Community variability (σ)", col = "Year") +
+  theme(legend.position = "right")
+ggsave("figures/assemblage_path.png", width = 7.5, height = 6.5)
