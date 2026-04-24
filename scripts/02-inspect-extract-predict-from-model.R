@@ -32,6 +32,34 @@ png("figures/traceplots_timebases.png", height=1800, width=1800, type = "cairo")
 rstan::stan_trace(mod1$model_output, 'b')
 dev.off()
 
+# rhat
+png("figures/model_rhathist.png", height=500, width=500, type = "cairo")
+mcmc_plot(mod1, type = "rhat_hist")
+dev.off()
+
+# effective size
+png("figures/model_neffhist.png", height=500, width=500, type = "cairo")
+mcmc_plot(mod1, type = "neff_hist")
+dev.off()
+
+# residuals plots
+mvgam::plot_mvgam_resids(mod1)
+mvgam::plot_mvgam_smooth(mod1, residuals = TRUE)
+# compare to model without latent variables
+mod2 = readRDS("outputs/gam_hierarchical_nolv_2025.rds")
+mvgam::plot_mvgam_smooth(mod2, residuals = TRUE)
+
+# residuals of the model with and without latenty trend 
+png("figures/model_residuals.png", height=500, width=1000, type = "cairo")
+par(mfrow=c(1,2))
+mvgam::plot_mvgam_smooth(mod1, residuals = TRUE)
+mvgam::plot_mvgam_smooth(mod2, residuals = TRUE)
+dev.off()
+
+mvgam::plot_mvgam_smooth(mod1, derivatives =  TRUE)
+mvgam::plot_mvgam_smooth(mod2, derivatives =  TRUE)
+
+
 ## forecast ----
 newdata = mod1$obs_data
 newdata$time = newdata$time + 32
@@ -39,6 +67,8 @@ fore = mvgam::forecast(mod1, newdata = newdata)
 saveRDS(fore, "outputs/forecast.rds")
 plot(fore,series = 10)
 forescore = score(fore)
+
+
 
 ## Plot the temporal trend (time smooth) without population random effect----
 
