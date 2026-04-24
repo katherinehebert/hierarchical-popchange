@@ -135,3 +135,19 @@ mod1 <- mvgam(data = data_train,
 )
 #saveRDS(mod1, paste0("outputs/gam_hierarchical_gp.rds")) 
 saveRDS(mod1, paste0("outputs/gam_hierarchical_gp_2025.rds")) 
+
+
+# without latent trend model ----
+mod2 <- mvgam(data = data_train,
+              formula =  y ~ s(time, bs = "tp", k = knots) + 
+                s(series, bs = "re"),
+              trend_model = "None",
+              family = "gaussian",
+              use_stan = TRUE,
+              chains = 3, 
+              burnin = 5000,
+              samples = 10000,
+              parellel = TRUE
+)
+#saveRDS(mod1, paste0("outputs/gam_hierarchical_gp.rds")) 
+saveRDS(mod2, paste0("outputs/gam_hierarchical_nolv_2025.rds")) 
