@@ -92,6 +92,8 @@ anim_save("figures/trend_density.gif", plot_trenddensity_anim)
 # 3-panel plot: histogram, mean trend, coherence -------------------------------
 ################################################################################
 
+col_lims = max(abs(min(avg_deriv_trend$cilo)), max(avg_deriv_trend$cihi))
+
 ## Panel A - Histogram of all population growth rates of the full time series ----
 (plot_trenddensity = 
    ggplot(data = derivs_without1981) +
@@ -102,39 +104,42 @@ anim_save("figures/trend_density.gif", plot_trenddensity_anim)
    geom_vline(xintercept = mean(derivs_without1981$value, na.rm = TRUE) + sd(derivs_without1981$value, na.rm = TRUE), lty = 2) +
    theme(panel.grid.major.x = element_line()) +
    scale_y_sqrt() +
-   labs(x = "Annual rate of change (α)", 
+   labs(x = expression(alpha), 
         y = "Frequency", 
-        fill = "α") +
+        fill = "α",
+        title = "Community Change Index") +
    scale_fill_distiller(palette = "RdYlGn", 
                         direction = 1, 
-                        limits = c(-.4,.4)) +
+                        limits = c(-col_lims, col_lims)) +
    coord_cartesian(xlim = c(-.4, .4))) 
 # variance
 var(derivs_without1981$value, na.rm = TRUE)
 
 ## Panel B - Trend of the distribution of rates of change through time ---------
-
 (avg_derivative_pointplot = 
     ggplot(data = avg_deriv_trend, aes(x = year)) +
     ggpattern::geom_area_pattern(aes(y = cihi),
                                  pattern = "gradient", 
                                  fill = "#ffffbf",
-                                 pattern_fill  = "#ffffbf80",
-                                 pattern_fill2 = "#77c15c") + #prepended w/ 50% transparency hex code (80)
+                                 pattern_fill  = "#ffffbf",
+                                 pattern_fill2 = "#77c15c") + 
     ggpattern::geom_area_pattern(aes(y = cilo),
                                  pattern = "gradient", 
                                  fill = "#ffffbf",
                                  pattern_fill  = "#f98c59",
-                                 pattern_fill2 = "#ffffbf80") + #prepended w/ 50% transparency hex code (80)
+                                 pattern_fill2 = "#ffffbf") + 
     geom_line(aes(y = avg_trend, col = avg_trend), lwd = .1) +
     geom_line(aes(y = avg_trend), lwd = .8, col = "black") +
-    geom_line(aes(y = cilo), lwd = 1, col = "white") +
-    geom_line(aes(y = cihi), lwd = 1, col = "white") +
+    geom_line(aes(y = cilo), lwd = .1, col = "white") +
+    geom_line(aes(y = cihi), lwd = .1, col = "white") +
     geom_hline(yintercept = 0, lwd = .3) +
-    scale_color_gradientn(colours = c("#d73027", "#f98c59", "#fee08b", "#ffffbf", "#d9ef8b", "#77c15c", "#1a9850"), limits = c(-0.4, 0.4)) +
+    scale_color_gradientn(colours = c("#d73027", "#f98c59", "#fee08b", "#ffffbf", "#d9ef8b", "#77c15c", "#1a9850"), 
+                          limits = c(-col_lims, col_lims)) +
     labs(x = "",
-         col = "α",
-         y = "Rate of change (α)") +
+         title = "Community Abundance Index",
+         y = expression(mu[alpha]),
+         col = expression(mu[alpha]),
+         ) +
     coord_cartesian(ylim = c(-.5, .5)) +
     theme(panel.grid.major = element_line(),
           legend.position = "right") +
@@ -143,14 +148,16 @@ var(derivs_without1981$value, na.rm = TRUE)
 ## Panel C - Trend of the distribution's variance through time -----------------
 
 (plot_coherence = ggplot(data = temporal_trend_yearly) +
-    geom_line(aes(y = sd, x = as.numeric(year), col = sd), lwd = 1.5) +
-    geom_point(aes(y = sd, x = as.numeric(year), col = sd), 
+    geom_line(aes(y = sd^2, x = as.numeric(year), col = sd), lwd = 1.5) +
+    geom_point(aes(y = sd^2, x = as.numeric(year), col = sd), 
                size = .9) +
-    labs(y = "Community variability (σ)", 
+    labs(title = "Community Stability Index", 
+         y = expression(sigma^2),
          x = "",
-         col = "σ") +
-    scale_color_distiller(palette = "YlGnBu", direction = 1, limits = c(0, .17)) +
-    coord_cartesian(ylim = c(0, .18)) +
+         col = expression(sigma^2)) +
+   colorspace::scale_color_continuous_sequential("YlGnBu",begin = .2) +
+    #scale_color_distiller(palette = "YlGnBu", direction = 1, limits = c(0, .17),) +
+    #coord_cartesian(ylim = c(0, .18)) +
     theme_pubr() +
     theme(panel.grid.major = element_line())
 )
@@ -158,11 +165,10 @@ var(derivs_without1981$value, na.rm = TRUE)
 mean(temporal_trend_yearly$sd[2:10])
 
 # Arrange the plot panels and save ---------------------------------------------
-((plot_trenddensity + 
-    theme(legend.position = "right"))/
-    (avg_derivative_pointplot) /
-    (plot_coherence + 
-       theme(legend.position = "right"))) +
+((plot_trenddensity + theme(legend.position = "top",
+                            legend.key.width = unit(2, "cm"))) /
+    ((avg_derivative_pointplot + theme(legend.position = "none"))  + 
+    (plot_coherence + theme(legend.position = "none")))) +
   plot_annotation(tag_levels = "a")
 ggsave("figures/assemblagevariability.png", width = 7.5, height = 7)
 
@@ -176,11 +182,49 @@ df =
     "var" = temporal_trend_yearly$sd
   )
 
-ggplot(data = df) +
-  geom_path(aes(x = mu, y = var), linewidth = .1) +
-  geom_point(aes(x = mu, y = var, col = as.numeric(year)), size = 3) +
-  scale_color_viridis_c(option = "turbo", end = 0, begin = 1) +
-  coord_cartesian(xlim = c(-.08,.08)) +
-  labs(x = "Rate of change (α)", y = "Community variability (σ)", col = "Year") +
-  theme(legend.position = "right")
-ggsave("figures/assemblage_path.png", width = 7.5, height = 6.5)
+(plot_path = ggplot(data = df) +
+    geom_vline(xintercept = 0, lty = 2, linewidth = .3) +
+    geom_hline(yintercept = max(df$var, na.rm = T)/2, lty = 2, linewidth = .3) +
+    geom_path(aes(x = mu, y = var), linewidth = .2, col = "black") +
+    geom_point(aes(x = mu, y = var, fill = as.numeric(year)), size = 4, pch = 21) +
+    geom_point(aes(x = mean(derivs_without1981$value, na.rm = TRUE),
+                   y = sd(derivs_without1981$value, na.rm = TRUE)), pch = 8, size = 2) +
+    ## text labels
+    geom_text(aes(x = mean(derivs_without1981$value, na.rm = TRUE)-0.005,
+                  y = sd(derivs_without1981$value, na.rm = TRUE),
+                  label = "CCI"), 
+              col = "black", hjust = 1) +
+    colorspace::scale_fill_continuous_divergingx("PRGn", mid = 1997, rev = F) +
+    coord_cartesian(xlim = c(-.08,.08)) +
+    scale_y_reverse() +
+    labs(x = expression(paste("Community Abundance Index ", (mu[alpha]))),
+         y = expression(paste("Community Stability Index ", (sigma^2))),
+         fill = "Year") +
+    theme(legend.position = "right"))
+ggsave("figures/assemblage_path.png", width = 5.16, height = 4.06)
+
+
+
+# Arrange the plot panels and save ---------------------------------------------
+((plot_trenddensity + theme(legend.position = "none",
+                            legend.key.width = unit(2, "cm"))) /
+   ((avg_derivative_pointplot + theme(legend.position = "none"))  + 
+      (plot_coherence + theme(legend.position = "none")))) /
+   plot_path +
+  plot_annotation(tag_levels = "a") +
+  plot_layout(heights = c(1, 1, 1.5))
+ggsave("figures/community-indicators.png", width = 8, height = 10)
+
+
+(
+  ((plot_path + theme(legend.position = "inside", 
+                      legend.position.inside = c(.93,.55),
+                      legend.key.height = unit(.5, "cm"))
+    ) +
+     (plot_trenddensity + theme(legend.position = "none"))) /
+    ((avg_derivative_pointplot + theme(legend.position = "none")) +
+    (plot_coherence + theme(legend.position = "none")))
+  ) +
+  plot_annotation(tag_levels = "a") #+
+  #plot_layout(heights = c(1, 2))
+ggsave("figures/community-indicators.png", width = 8.75, height = 8.05)
