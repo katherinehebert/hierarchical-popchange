@@ -222,7 +222,6 @@ ggsave("figures/assemblage_path_withyears.png", width = 10, height = 10)
 
 # Arrange the plot panels and save ---------------------------------------------
 
-
 (
   ((plot_trenddensity + theme(legend.position = "none")) +
      (avg_derivative_pointplot + theme(legend.position = "none"))) /
