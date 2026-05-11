@@ -203,28 +203,35 @@ df =
     theme(legend.position = "right"))
 ggsave("figures/assemblage_path.png", width = 5.16, height = 4.06)
 
+(ggplot(data = df) +
+    geom_vline(xintercept = 0, lty = 2, linewidth = .3) +
+    geom_hline(yintercept = max(df$var, na.rm = T)/2, lty = 2, linewidth = .3) +
+    geom_path(aes(x = mu, y = var), linewidth = .2, col = "black") +
+    geom_point(aes(x = mu, y = var, fill = as.numeric(year)), size = 4, pch = 21) +
+    geom_point(aes(x = mean(derivs_without1981$value, na.rm = TRUE),
+                   y = sd(derivs_without1981$value, na.rm = TRUE)), pch = 8, size = 2) +
+    ## text labels
+    geom_text(aes(x = mu, y = var+0.004, label = as.character(year)),
+              col = "black", hjust = 1) +
+    colorspace::scale_fill_continuous_divergingx("PRGn", mid = 1997, rev = F, name = "Year") +
+    coord_cartesian(xlim = c(-.08,.08)) +
+    scale_y_reverse() )
+ggsave("figures/assemblage_path_withyears.png", width = 10, height = 10)
+
 
 
 # Arrange the plot panels and save ---------------------------------------------
-((plot_trenddensity + theme(legend.position = "none",
-                            legend.key.width = unit(2, "cm"))) /
-   ((avg_derivative_pointplot + theme(legend.position = "none"))  + 
-      (plot_coherence + theme(legend.position = "none")))) /
-   plot_path +
-  plot_annotation(tag_levels = "a") +
-  plot_layout(heights = c(1, 1, 1.5))
-ggsave("figures/community-indicators.png", width = 8, height = 10)
 
 
 (
-  ((plot_path + theme(legend.position = "inside", 
-                      legend.position.inside = c(.93,.55),
-                      legend.key.height = unit(.5, "cm"))
-    ) +
-     (plot_trenddensity + theme(legend.position = "none"))) /
-    ((avg_derivative_pointplot + theme(legend.position = "none")) +
-    (plot_coherence + theme(legend.position = "none")))
-  ) +
+  ((plot_trenddensity + theme(legend.position = "none")) +
+     (avg_derivative_pointplot + theme(legend.position = "none"))) /
+    ((plot_coherence + theme(legend.position = "none")) +
+       (plot_path + theme(legend.position = "inside", 
+                          legend.position.inside = c(.93,.55),
+                          legend.key.height = unit(.5, "cm"))
+       ))
+) +
   plot_annotation(tag_levels = "a") #+
   #plot_layout(heights = c(1, 2))
 ggsave("figures/community-indicators.png", width = 8.75, height = 8.05)
